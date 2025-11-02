@@ -6,79 +6,79 @@ import upload, { handleUploadSuccess } from '../../config/multer.config';
 export const productsRoutes = (controller: ProductsController): Router => {
   const router = Router();
 
+  // =================== BASIC PRODUCT CRUD ===================
   router.get('/', controller.getAll.bind(controller));
   router.get('/:id', validateId, controller.getById.bind(controller));
   router.post('/', controller.create.bind(controller));
   router.patch('/:id', validateId, controller.update.bind(controller));
-  router.post('/productvariant', controller.productvariant.bind(controller));
-  router.delete('/:id', controller.deleteproductvariant.bind(controller));
+  router.delete('/:id', validateId, controller.delete.bind(controller));
 
+  // =================== PRODUCT COLOR MANAGEMENT ===================
+  router.get('/:productId/colors', controller.getAllColors.bind(controller));
+  router.post('/colors', controller.createColor.bind(controller));
+  router.patch('/colors/:colorId', controller.updateColor.bind(controller));
+  router.delete('/colors/:colorId', controller.deleteColor.bind(controller));
+
+  // =================== PRODUCT COLOR IMAGES ===================
+  router.get('/colors/:colorId/images', controller.getColorImages.bind(controller));
   router.post(
-    '/images/upload/multiple',
+    '/colors/images/upload/multiple',
     upload.array('images', 15),
     handleUploadSuccess,
-    controller.uploadMultipleImages.bind(controller),
+    controller.uploadMultipleColorImages.bind(controller),
   );
+  router.patch('/colors/images/:imageId', controller.updateColorImage.bind(controller));
+  router.delete('/colors/images/:imageId', controller.deleteColorImage.bind(controller));
 
+  // =================== PRODUCT SIZE VARIANTS ===================
+  router.get('/colors/:colorId/sizes', controller.getSizeVariants.bind(controller));
+  router.post('/sizes', controller.createSizeVariant.bind(controller));
+  router.patch('/sizes/:variantId', controller.updateSizeVariant.bind(controller));
+  router.delete('/sizes/:variantId', controller.deleteSizeVariant.bind(controller));
+
+  // =================== PRODUCT IMAGES (General Product Level) ===================
+  router.get('/:productId/images', controller.getProductImages.bind(controller));
   router.post(
     '/images/upload/single',
     upload.single('image'),
     handleUploadSuccess,
     controller.uploadSingleImage.bind(controller),
   );
-
-  router.get('/:productId/images', controller.getProductImages.bind(controller));
-
-  /**
-   * Delete a product image
-   * DELETE /products/images/:imageId
-   */
+  router.post(
+    '/images/upload/multiple',
+    upload.array('images', 15),
+    handleUploadSuccess,
+    controller.uploadMultipleImages.bind(controller),
+  );
   router.delete('/images/:imageId', controller.deleteProductImage.bind(controller));
-
-  /**
-   * Set primary image for a product
-   * PATCH /products/images/:imageId/primary
-   */
   router.patch('/images/:imageId/primary', controller.setPrimaryProductImage.bind(controller));
-
-  /**
-   * Update product image details
-   * PUT /products/images/:imageId
-   */
   router.put('/images/:imageId', controller.updateProductImage.bind(controller));
 
-  // ==================== WISHLIST ROUTES ====================
+  // =================== STOCK AND INVENTORY MANAGEMENT ===================
+  router.get('/sizes/:variantId/stock', controller.getStock.bind(controller));
+  router.put('/sizes/:variantId/stock', controller.updateStock.bind(controller));
+  router.post('/sizes/:variantId/stock/adjust', controller.adjustStock.bind(controller));
+  router.get('/sizes/:variantId/inventory-logs', controller.getInventoryLogs.bind(controller));
+  router.get('/sizes/:variantId/stock-alerts', controller.getStockAlerts.bind(controller));
+  router.patch('/stock-alerts/:alertId/resolve', controller.resolveStockAlert.bind(controller));
 
-  /**
-   * Add product to wishlist
-   * POST /products/wishlist/add
-   * Body: { user_id: number, product_id: number }
-   */
+  // =================== WISHLIST MANAGEMENT ===================
   router.post('/wishlist/add', controller.addToWishlist.bind(controller));
-
-  /**
-   * Remove item from wishlist
-   * DELETE /products/wishlist/remove/:wishlistId
-   * Body: { user_id: number }
-   */
+  router.delete('/wishlist/clear', controller.clearWishlist.bind(controller));
   router.delete(
-    '/wishlist/remove/:wishlistId',
+    '/wishlist/remove/:wishlist_id',
     validateId,
     controller.removeFromWishlist.bind(controller),
   );
-
-  /**
-   * Clear all wishlist items for user
-   * DELETE /products/wishlist/clear
-   * Body: { user_id: number }
-   */
-  router.delete('/wishlist/clear', controller.clearWishlist.bind(controller));
-
-  /**
-   * Get wishlist items for a user
-   * GET /products/wishlist/:userId
-   */
   router.get('/wishlist/:userId', validateId, controller.getWishlistByUserId.bind(controller));
+
+  // // =================== LEGACY PRODUCT VARIANTS ===================
+  //old way
+  // router.post('/productvariant', controller.productvariant.bind(controller));
+  // router.delete('/productvariant/:id', controller.deleteproductvariant.bind(controller));
+
+  // =================== MULTER ERROR HANDLER ===================
+  router.use(controller.handleMulterError.bind(controller));
 
   return router;
 };

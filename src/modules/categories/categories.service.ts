@@ -85,20 +85,40 @@ export class CategoriesService implements IService, ICategoriesService {
     }
   }
 
-  async update(
-    id: number,
-    data: Partial<Omit<Categorie, 'id' | 'createdAt'>>,
-  ): Promise<Categorie | undefined> {
-    const item = this.categories.find((r) => r.id === id);
-    if (!item) throw new InvalidInputError('Categorie not found');
-    Object.assign(item, data);
-    return item;
+  async update(id: string, data: any): Promise<any | undefined> {
+    try {
+      const updatedCategory = await executePrismaOperation(
+        'Category',
+        {
+          operation: PrismaOperationType.UPDATE,
+          where: { id },
+          data: {
+            ...data,
+          },
+        },
+        this.db.client,
+        this.logger,
+      );
+      return updatedCategory;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
   }
 
-  async delete(id: number): Promise<boolean> {
-    const index = this.categories.findIndex((r) => r.id === id);
-    if (index === -1) throw new InvalidInputError('Categorie not found');
-    this.categories.splice(index, 1);
-    return true;
+  async delete(id: string): Promise<boolean> {
+    try {
+      await executePrismaOperation(
+        'Category',
+        {
+          operation: PrismaOperationType.DELETE,
+          where: { id },
+        },
+        this.db.client,
+        this.logger,
+      );
+      return true;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
   }
 }

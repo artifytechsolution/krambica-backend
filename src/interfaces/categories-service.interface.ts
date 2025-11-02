@@ -6,8 +6,8 @@ export interface ICategoriesService {
   getById(id: string): Promise<Categorie | undefined>;
   create(data: Omit<Categorie, 'id' | 'createdAt'>): Promise<Categorie>;
   update(
-    id: number,
+    id: string,
     data: Partial<Omit<Categorie, 'id' | 'createdAt'>>,
   ): Promise<Categorie | undefined>;
-  delete(id: number): Promise<boolean>;
+  delete(id: string): Promise<boolean>;
 }

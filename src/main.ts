@@ -3,10 +3,11 @@ import { App } from './app';
 import { DIContainer } from './services/di-container';
 import { readdirSync } from 'fs';
 import { join } from 'path';
-import { Server } from 'socket.io';
+import { initializeWebSocket } from './config/websocket';
 
 let io: any;
 let stockNamespace: any;
+
 async function bootstrap() {
   // Initialize core services
   const ConfigService = require('./services/config.service').ConfigService;
@@ -16,7 +17,7 @@ async function bootstrap() {
   // Register ConfigService first (no dependencies)
   const configService = new ConfigService();
   DIContainer.register('ConfigService', configService);
-  configService.get('LOG_LEVEL'); // Ensure ConfigService is initialized
+  configService.get('LOG_LEVEL');
   console.log('Registered service: ConfigService');
 
   // Register LoggerService (depends on ConfigService)
@@ -26,7 +27,6 @@ async function bootstrap() {
   loggerService.info('Registered service: LoggerService');
 
   const emailService = new EmailService(configService);
-  // Removed the erroneous line: DIContainer.setLogger(emailService);
   DIContainer.register('EmailService', emailService);
   loggerService.info('Registered service: EmailService');
 
@@ -36,13 +36,13 @@ async function bootstrap() {
     .filter((dirent) => dirent.isDirectory())
     .map((dirent) => dirent.name);
 
-  //socket setup
   const moduleServices: {
     name: string;
     ServiceClass: any;
     dependencies: string[];
     optionalDependencies: string[];
   }[] = [];
+
   for (const folder of moduleFolders) {
     try {
       const serviceName = `${folder.charAt(0).toUpperCase() + folder.slice(1)}Service`;
@@ -87,6 +87,7 @@ async function bootstrap() {
       optionalDependencies: [],
     },
   ];
+
   const allServices = [...coreServices, ...moduleServices];
   const registered = new Set<string>();
   const servicesToRegister: {
@@ -141,37 +142,65 @@ async function bootstrap() {
     throw new Error(`Failed to register services: ${failedServices.join(', ')}`);
   }
 
+  // Initialize Express app
   const app = new App();
   await app.initialize();
   const server = http.createServer(app.getApp());
 
-  //socket configration
+  // ========================================
+  // ✅ PROPERLY INITIALIZE WEBSOCKET FOR NOTIFICATIONS
+  // ========================================
+  loggerService.info('🔌 Initializing WebSocket for notifications...');
+
+  try {
+    // Initialize notification WebSocket (with Redis Pub/Sub)
+    await initializeWebSocket(server);
+    loggerService.info('✅ WebSocket for notifications initialized successfully');
+  } catch (error) {
+    loggerService.error(
+      `❌ Failed to initialize notification WebSocket: ${(error as Error).message}`,
+    );
+    throw error;
+  }
+
+  // ========================================
+  // ✅ YOUR EXISTING STOCK NAMESPACE (Keep as is)
+  // ========================================
+  loggerService.info('📊 Initializing Stock namespace...');
+
+  const { Server } = require('socket.io');
   io = new Server(server, {
     cors: {
-      origin: '*', // Allow all origins for simplicity (adjust for production)
+      origin: '*',
       methods: ['GET', 'POST'],
     },
   });
+
   stockNamespace = io.of('/stock');
   stockNamespace.on('connection', (socket: any) => {
-    console.log('Client connected to /chat namespace:', socket.id);
+    loggerService.info(`Client connected to /stock namespace: ${socket.id}`);
 
-    // When a message is received from the client
     socket.on('message', (data: any) => {
-      console.log(`Received in /chat: ${data}`);
-      // Echo the message back to the client in the same namespace
+      loggerService.info(`Received in /stock: ${data}`);
       socket.emit('message', `Echo: ${data}`);
     });
 
-    // When the client disconnects
     socket.on('disconnect', () => {
-      console.log('Client disconnected from /chat namespace:', socket.id);
+      loggerService.info(`Client disconnected from /stock namespace: ${socket.id}`);
     });
   });
 
+  loggerService.info('✅ Stock namespace initialized');
+
+  // Start server
   const port = configService.getNumber('PORT') || 3000;
   server.listen(port, () => {
-    loggerService.info(`Server running on port ${port}`);
+    loggerService.info('═══════════════════════════════════════');
+    loggerService.info(`🚀 SERVER RUNNING ON PORT ${port}`);
+    loggerService.info(`🌐 HTTP: http://localhost:${port}`);
+    loggerService.info(`📡 WebSocket (Notifications): ws://localhost:${port}/socket.io`);
+    loggerService.info(`📊 WebSocket (Stock): ws://localhost:${port}/stock`);
+    loggerService.info('═══════════════════════════════════════');
   });
 }
 
@@ -180,4 +209,4 @@ bootstrap().catch((error) => {
   process.exit(1);
 });
 
-export { stockNamespace };
+export { stockNamespace, io };

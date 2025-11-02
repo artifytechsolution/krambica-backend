@@ -1,4 +1,6 @@
-// Prisma schema for Grocery/Food Ecommerce (Fruits, Vegetables, Milk, etc.)
+// =====================================================
+// Prisma Schema for Clothing Ecommerce Platform
+// =====================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -10,7 +12,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// =====================================================
 // ENUMS
+// =====================================================
+
 enum DiscountType {
   PERCENTAGE
   FIXED
@@ -28,6 +33,11 @@ enum ReferenceType {
   ADJUSTMENT
   PURCHASE
   MANUAL
+  RESTOCK
+  PRODUCT
+  PAYMENT
+  USER
+  SYSTEM
 }
 
 enum InventoryChangeType {
@@ -80,13 +90,78 @@ enum CouponStatus {
   INACTIVE
 }
 
-enum InStock {
-  AVILABLE
-  FEWAVILABLE
-  OUTOFSTCOK
+enum PromotionType {
+  BUY_X_GET_Y_FREE
+  QUANTITY_DISCOUNT
+  BUNDLE_DEAL
+  TIERED_DISCOUNT
 }
 
-// MODELS
+enum PromotionStatus {
+  ACTIVE
+  INACTIVE
+  SCHEDULED
+  EXPIRED
+}
+
+enum StockAlertType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  OVERSTOCK
+}
+
+enum Gender {
+  MEN
+  WOMEN
+  UNISEX
+  KIDS
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  REFUNDED
+  COMPLETED
+}
+
+enum NotificationType {
+  USER_REGISTER
+  ORDER_CREATED
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  PRODUCT_BACK_IN_STOCK
+  SALE_ANNOUNCEMENT
+  SYSTEM_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  ACTIVE
+  ARCHIVED
+  EXPIRED
+}
+
+enum BatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+
+
+// =====================================================
+// USER & AUTHENTICATION
+// =====================================================
 
 model User {
   id           String    @unique @default(uuid())
@@ -98,19 +173,25 @@ model User {
   phone        String?
   refreshToken String?
   Otp          String?
-  is_verified  Boolean? @default(false)
+  is_verified  Boolean?  @default(false)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  profile             Profile?
-  ProductReview       ProductReview[]
-  Wishlist            Wishlist[]
-  ProductInventoryLog ProductInventoryLog[] @relation("UserChangedLogs")
+  profile                   Profile?
+  addresses                 Address[]
+  ProductReview             ProductReview[]
+  Wishlist                  Wishlist[]
+  ProductInventoryLog       ProductInventoryLog[]       @relation("UserChangedLogs")
+  SizeVariantInventoryLog   SizeVariantInventoryLog[]   @relation("UserChangedSizeVariantLogs")
+  Order                     Order[]
+  CouponRedemption          CouponRedemption[]
+  PromotionRedemption       PromotionRedemption[]
+  notificationRecipients   NotificationRecipient[]
+  notificationPreference   NotificationPreference?
+  notificationStats        NotificationStats?
 
-  Order Order[]
-
-  CouponRedemption CouponRedemption[]
+  @@index([email])
 }
 
 model Profile {
@@ -118,90 +199,161 @@ model Profile {
   profile_id Int       @id @default(autoincrement())
   user_id    Int       @unique
   avatar     String?
-  address    String?
-  city       String?
-  state      String?
-  zip_code   String?
-  country    String?
-  user       User      @relation(fields: [user_id], references: [user_id])
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   deletedAt  DateTime?
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 }
 
+model Address {
+  id           String   @unique @default(uuid())
+  address_id   Int      @id @default(autoincrement())
+  user_id      Int
+  fullName     String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  zipCode      String
+  country      String   @default("India")
+  isDefault    Boolean  @default(false)
+  addressType  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user   User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([user_id])
+  @@index([isDefault])
+}
+
+// =====================================================
+// PRODUCT CATALOG
+// =====================================================
+
 model Category {
-  id         String    @unique @default(uuid())
+  id          String    @unique @default(uuid())
   category_id Int       @id @default(autoincrement())
   name        String
   slug        String?   @unique
   description String?
-  products    Product[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
+  products             Product[]
+  promotionEligibility PromotionEligibleProduct[] @relation("EligibleCategory")
 
-model Unit {
-  unit_id   Int      @id @default(autoincrement())
-  name      String   @unique
-  short     String
-  createdAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  products        Product[]
-  productVariants ProductVariant[]
-  
+  @@index([slug])
 }
+//here remove unit model 
 
 model Product {
-  id           String   @unique @default(uuid())
-  product_id   Int      @id @default(autoincrement())
-  name         String
-  slug         String?  @unique
-  description  String?
-  sku          String?  @unique
-  price        Float
-  stock        Int      @default(0)
-  isVisible    Boolean  @default(true)
-  isFeatured   Boolean  @default(false)
-  isPerishable Boolean  @default(false)
-  expiryDays   Int?
-  inStock      InStock? 
-  category_id  Int
-  unit_id      Int
-  category     Category @relation(fields: [category_id], references: [category_id])
-  unit         Unit     @relation(fields: [unit_id], references: [unit_id])
-  reviews       ProductReview[]
-  tags          ProductTag[]
-  discounts     ProductDiscount[]
-  seo           ProductSEO?
-  wishlists     Wishlist[]
-  inventoryLogs ProductInventoryLog[]
-  variants      ProductVariant[]
-  images        ProductImage[]
+  id               String   @unique @default(uuid())
+  product_id       Int      @id @default(autoincrement())
+  name             String
+  slug             String?  @unique
+  description      String?
+  sku              String?  @unique
+  basePrice        Float
+  isVisible        Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  category_id      Int
+  gender           Gender?
+  material         String?
+  fabric           String?
+  careInstructions String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime? // ✅ new field for soft delete
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  category              Category                   @relation(fields: [category_id], references: [category_id], onDelete: Restrict)
+  reviews               ProductReview[]
+  tags                  ProductTag[]
+  discounts             ProductDiscount[]
+  seo                   ProductSEO?
+  wishlists             Wishlist[]
+  inventoryLogs         ProductInventoryLog[]
+  images                ProductImage[]
+  colors                ProductColor[]
+  eligibleForPromotions PromotionEligibleProduct[] @relation("EligibleProducts")
+  availableAsFree       PromotionFreeProduct[]     @relation("FreeProducts")
+  selectedAsFree        PromotionFreeItem[]        @relation("SelectedFreeProducts")
 
-  OrderItem OrderItem[]
+  @@index([category_id])
+  @@index([gender])
+  @@index([slug])
+  @@index([isFeatured])
+  @@index([isVisible])
+  @@index([deletedAt]) // ✅ optional index for faster filtering
 }
-//variance like 1 kg na 10 stock ma che
-model ProductVariant {
-  id           String   @unique @default(uuid())
-  variant_id   Int      @id @default(autoincrement())
-  product_id Int
-  name       String      // e.g., "500ml", "1kg"
-  unit_id    Int
-  sku        String @unique
-  price      Float
-  stock      Int     @default(0)
 
-  product    Product @relation(fields: [product_id], references: [product_id])
-  unit       Unit    @relation(fields: [unit_id], references: [unit_id])
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+model ProductColor {
+  id               String   @unique @default(uuid())
+  product_color_id Int      @id @default(autoincrement())
+  product_id       Int
+  color_name       String
+  color_code       String?
+  isAvailable      Boolean  @default(true)
+  displayOrder     Int      @default(0)
+  totalStock       Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  OrderItem OrderItem[]
+  product      Product              @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  images       ProductColorImage[]
+  sizeVariants ProductSizeVariant[]
+
+  @@index([product_id])
+  @@index([isAvailable])
+}
+
+model ProductColorImage {
+  id               Int      @id @default(autoincrement())
+  product_color_id Int
+  url              String
+  altText          String?
+  isPrimary        Boolean  @default(false)
+  displayOrder     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  productColor ProductColor @relation(fields: [product_color_id], references: [product_color_id], onDelete: Cascade)
+
+  @@index([product_color_id])
+  @@index([isPrimary])
+}
+
+model ProductSizeVariant {
+  id                  String   @unique @default(uuid())
+  product_size_var_id Int      @id @default(autoincrement())
+  product_color_id    Int
+  size                String
+  sku                 String   @unique
+  price               Float
+  stock               Int      @default(0)
+  reservedStock       Int      @default(0)
+  availableStock      Int      @default(0)
+  lowStockThreshold   Int      @default(5)
+  isAvailable         Boolean  @default(true)
+  isLowStock          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  productColor            ProductColor              @relation(fields: [product_color_id], references: [product_color_id], onDelete: Cascade)
+  OrderItem               OrderItem[]
+  inventoryLogs           SizeVariantInventoryLog[]
+  stockAlerts             StockAlert[]
+  returnItems             OrderReturnItem[]
+  availableAsFreeVariant  PromotionFreeProduct[]    @relation("FreeSizeVariants")
+  selectedAsFreeVariant   PromotionFreeItem[]       @relation("SelectedFreeSizeVariants")
+
+  @@index([product_color_id])
+  @@index([sku])
+  @@index([isAvailable])
 }
 
 model ProductImage {
@@ -211,10 +363,98 @@ model ProductImage {
   altText    String?
   isPrimary  Boolean  @default(false)
   createdAt  DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt  DateTime @updatedAt
 
-  product Product @relation(fields: [product_id], references: [product_id])
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@index([isPrimary])
 }
+
+model Tag {
+  tag_id   Int          @id @default(autoincrement())
+  name     String       @unique
+  products ProductTag[]
+}
+
+model ProductTag {
+  product_tag_id String  @id @default(uuid())
+  product_id     Int
+  tag_id         Int
+
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tag_id], references: [tag_id], onDelete: Cascade)
+
+
+  @@index([product_id])
+  @@index([tag_id])
+}
+
+model ProductSEO {
+  id              String @unique @default(uuid())
+  product_seo_id  Int    @id @default(autoincrement())
+  product_id      Int    @unique
+  metaTitle       String
+  metaDescription String
+  keywords        String
+
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+}
+
+model ProductDiscount {
+  id                  String       @unique @default(uuid())
+  product_discount_id Int          @id @default(autoincrement())
+  product_id          Int
+  discountType        DiscountType
+  discountValue       Float
+  startDate           DateTime
+  endDate             DateTime
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@index([startDate, endDate])
+}
+
+model ProductReview {
+  id                String       @unique @default(uuid())
+  product_review_id Int          @id @default(autoincrement())
+  product_id        Int
+  user_id           Int
+  rating            Int
+  reviewText        String
+  status            ReviewStatus @default(PENDING)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@index([user_id])
+  @@index([status])
+  @@index([rating])
+}
+
+model Wishlist {
+  uuid        String   @unique @default(uuid())
+  wishlist_id Int      @id @default(autoincrement())
+  user_id     Int
+  product_id  Int
+  addedAt     DateTime @default(now())
+
+  user    User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+
+  @@index([user_id])
+}
+
+// =====================================================
+// INVENTORY MANAGEMENT
+// =====================================================
 
 model ProductInventoryLog {
   id                String              @unique @default(uuid())
@@ -231,89 +471,74 @@ model ProductInventoryLog {
   remarks           String?
   timestamp         DateTime            @default(now())
 
-  product   Product @relation(fields: [product_id], references: [product_id])
-  changedBy User    @relation("UserChangedLogs", fields: [changed_by], references: [user_id])
+  product   Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  changedBy User    @relation("UserChangedLogs", fields: [changed_by], references: [user_id], onDelete: Restrict)
+
+  @@index([product_id])
+  @@index([timestamp])
+  @@index([referenceType, referenceId])
 }
 
-model ProductDiscount {
-  id                  String       @unique @default(uuid())
-  product_discount_id Int          @id @default(autoincrement())
-  product_id          Int
-  discountType        DiscountType
-  discountValue       Float
-  startDate           DateTime
-  endDate             DateTime
-  createdAt           DateTime     @default(now())
-  updatedAt   DateTime @updatedAt
+model SizeVariantInventoryLog {
+  id                  String              @unique @default(uuid())
+  inventory_log_id    Int                 @id @default(autoincrement())
+  product_size_var_id Int
+  changeType          InventoryChangeType
+  quantityChanged     Int
+  stockBeforeChange   Int
+  stockAfterChange    Int
+  reservedStockBefore Int                 @default(0)
+  reservedStockAfter  Int                 @default(0)
+  referenceType       ReferenceType
+  referenceId         String
+  changed_by          Int?
+  remarks             String?
+  timestamp           DateTime            @default(now())
 
-  product Product @relation(fields: [product_id], references: [product_id])
+  sizeVariant ProductSizeVariant @relation(fields: [product_size_var_id], references: [product_size_var_id], onDelete: Cascade)
+  changedBy   User?              @relation("UserChangedSizeVariantLogs", fields: [changed_by], references: [user_id], onDelete: SetNull)
+
+  @@index([product_size_var_id])
+  @@index([referenceType, referenceId])
+  @@index([timestamp])
 }
 
-model ProductReview {
-  id                String       @unique @default(uuid())
-  product_review_id Int          @id @default(autoincrement())
-  product_id        Int
-  user_id           Int
-  rating            Int
-  reviewText        String
-  status            ReviewStatus @default(PENDING)
-  createdAt         DateTime     @default(now())
-  updatedAt   DateTime @updatedAt
+model StockAlert {
+  id                  String         @unique @default(uuid())
+  stock_alert_id      Int            @id @default(autoincrement())
+  product_size_var_id Int
+  alertType           StockAlertType
+  currentStock        Int
+  threshold           Int
+  isResolved          Boolean        @default(false)
+  notifiedAt          DateTime?
+  resolvedAt          DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
-  product Product @relation(fields: [product_id], references: [product_id])
-  user    User    @relation(fields: [user_id], references: [user_id])
+  sizeVariant ProductSizeVariant @relation(fields: [product_size_var_id], references: [product_size_var_id], onDelete: Cascade)
+
+  @@index([product_size_var_id])
+  @@index([isResolved])
+  @@index([alertType])
 }
 
-model Tag {
-  tag_id   Int          @id @default(autoincrement())
-  name     String       @unique
-  products ProductTag[]
-}
-
-model ProductTag {
-  product_tag_id String  @id @default(uuid())
-  product_id     Int
-  tag_id         Int
-  product        Product @relation(fields: [product_id], references: [product_id])
-  tag            Tag     @relation(fields: [tag_id], references: [tag_id])
-}
-
-model ProductSEO {
-  id             String @unique @default(uuid())
-  product_seo_id Int    @id @default(autoincrement())
-
-  product_id      Int    @unique
-  metaTitle       String
-  metaDescription String
-  keywords        String
-
-  product Product @relation(fields: [product_id], references: [product_id])
-}
-
-model Wishlist {
-  uuid        String   @unique @default(uuid())
-  wishlist_id Int      @id @default(autoincrement())
-  user_id     Int
-  product_id  Int
-  addedAt     DateTime @default(now())
-
-  user    User    @relation(fields: [user_id], references: [user_id])
-  product Product @relation(fields: [product_id], references: [product_id])
-}
-
-
+// =====================================================
+// ORDERS & PAYMENTS
+// =====================================================
 
 model Order {
   id             String         @unique @default(uuid())
   order_id       Int            @id @default(autoincrement())
   user_id        Int
+  address_id     Int?
   coupon_id      Int?
   totalAmount    Float
-  discount       Float?          @default(0)
-  tax            Float?          @default(0)
-  shippingCost   Float?          @default(0)
+  discount       Float?         @default(0)
+  tax            Float?         @default(0)
+  shippingCost   Float?         @default(0)
   grandTotal     Float?
-  status         OrderStatus   @default(PENDING)
+  status         OrderStatus    @default(PENDING)
   paymentStatus  PaymentStatus  @default(UNPAID)
   paymentMethod  PaymentMethod?
   shippingMethod ShippingMethod?
@@ -323,26 +548,38 @@ model Order {
   cancelledAt    DateTime?
   deliveredAt    DateTime?
 
-  user           User           @relation(fields: [user_id], references: [user_id])
-  coupon         Coupon?        @relation(fields: [coupon_id], references: [coupon_id])
-  items          OrderItem[]
-  payment        OrderPayment?
-  redemptions    CouponRedemption[]
+  user                 User                    @relation(fields: [user_id], references: [user_id], onDelete: Restrict)
+  shippingAddress      Address?                @relation(fields: [address_id], references: [address_id], onDelete: SetNull)
+  coupon               Coupon?                 @relation(fields: [coupon_id], references: [coupon_id], onDelete: SetNull)
+  items                OrderItem[]
+  payment              OrderPayment?
+  redemptions          CouponRedemption[]
+  promotionRedemptions PromotionRedemption[]
+  returns              OrderReturn[]
+
+  @@index([user_id])
+  @@index([status])
+  @@index([address_id])
+  @@index([placedAt])
 }
 
 model OrderItem {
-  id            String          @unique @default(uuid())
-  order_item_id Int             @id @default(autoincrement())
-  order_id      Int
-  product_id    Int
-  variant_id    Int?            // must match type in ProductVariant
-  quantity      Int?
-  price         Float?          // price per unit
-  total         Float?          // quantity * price
+  id                  String   @unique @default(uuid())
+  order_item_id       Int      @id @default(autoincrement())
+  order_id            Int
+  product_size_var_id Int?
+  quantity            Int
+  price               Float
+  total               Float
+  stockReservedAt     DateTime?
+  stockDeductedAt     DateTime?
 
-  order         Order           @relation(fields: [order_id], references: [order_id])
-  product       Product         @relation(fields: [product_id], references: [product_id])
-  variant       ProductVariant? @relation(fields: [variant_id], references: [variant_id])
+  order       Order               @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+  sizeVariant ProductSizeVariant? @relation(fields: [product_size_var_id], references: [product_size_var_id], onDelete: SetNull)
+  returnItems OrderReturnItem[]
+
+  @@index([order_id])
+  @@index([product_size_var_id])
 }
 
 model OrderPayment {
@@ -354,46 +591,341 @@ model OrderPayment {
   method        PaymentMethod
   status        PaymentStatus
   paidAt        DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  order         Order         @relation(fields: [order_id], references: [order_id])
+  order Order @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([transactionId])
 }
+
+// =====================================================
+// RETURNS & REFUNDS (For Future Use)
+// =====================================================
+
+model ReturnReason {
+  id               String   @unique @default(uuid())
+  return_reason_id Int      @id @default(autoincrement())
+  reason           String   
+  description      String?
+  isActive         Boolean  @default(true)
+  displayOrder     Int      @default(0)
+  requiresImage    Boolean  @default(false)
+  allowsExchange   Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  orderReturns OrderReturn[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+model OrderReturn {
+  id               String       @unique @default(uuid())
+  return_id        Int          @id @default(autoincrement())
+  order_id         Int
+  return_reason_id Int?
+  reason           String
+  reasonDetails    String?
+  status           ReturnStatus @default(REQUESTED)
+  refundAmount     Float
+  refundMethod     String?
+  proofImages      String?
+  adminNotes       String?
+  requestedAt      DateTime     @default(now())
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  refundedAt       DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  order              Order              @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+  returnReasonOption ReturnReason?      @relation(fields: [return_reason_id], references: [return_reason_id], onDelete: SetNull)
+  returnItems        OrderReturnItem[]
+
+  @@index([order_id])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([return_reason_id])
+}
+
+model OrderReturnItem {
+  id                  String   @unique @default(uuid())
+  return_item_id      Int      @id @default(autoincrement())
+  return_id           Int
+  order_item_id       Int
+  product_size_var_id Int
+  quantity            Int
+  reason              String?
+  condition           String?
+  createdAt           DateTime @default(now())
+
+  returnRequest OrderReturn        @relation(fields: [return_id], references: [return_id], onDelete: Cascade)
+  orderItem     OrderItem          @relation(fields: [order_item_id], references: [order_item_id], onDelete: Cascade)
+  sizeVariant   ProductSizeVariant @relation(fields: [product_size_var_id], references: [product_size_var_id], onDelete: Restrict)
+
+  @@index([return_id])
+  @@index([order_item_id])
+}
+
+// =====================================================
+// COUPONS & PROMOTIONS
+// =====================================================
 
 model Coupon {
-  id             String         @unique @default(uuid())
-  coupon_id      Int            @id @default(autoincrement())
-  code           String?         @unique
-  description    String?
-  type           CouponType
-  value          Float?
-  minOrderValue  Float?         @default(0)
-  maxDiscount    Float?
-  usageLimit     Int?
-  usedCount      Int            @default(0)
-  perUserLimit   Int?
-  validFrom      DateTime?
-  validTo        DateTime?
-  status         CouponStatus?   @default(ACTIVE)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id            String        @unique @default(uuid())
+  coupon_id     Int           @id @default(autoincrement())
+  code          String?       @unique
+  description   String?
+  type          CouponType
+  value         Float?
+  minOrderValue Float?        @default(0)
+  maxDiscount   Float?
+  usageLimit    Int?
+  usedCount     Int           @default(0)
+  perUserLimit  Int?
+  validFrom     DateTime?
+  validTo       DateTime?
+  status        CouponStatus? @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  orders         Order[]
-  redemptions    CouponRedemption[]
+  orders      Order[]
+  redemptions CouponRedemption[]
+
+  @@index([code])
+  @@index([status])
+  @@index([validFrom, validTo])
+}
+// ek j user ek j oreder par uniqueness
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  coupon_id Int
+  user_id   Int
+  order_id  Int
+  usedAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coupon Coupon @relation(fields: [coupon_id], references: [coupon_id], onDelete: Cascade)
+  user   User   @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  order  Order  @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+
+  @@unique([coupon_id, user_id, order_id])
+  @@index([user_id])
+  @@index([coupon_id])
 }
 
-//user can used only one time cupon that perpose i have create this table
-model CouponRedemption {
-  id         String   @id @default(uuid())
-  coupon_id  Int
-  user_id    Int
-  order_id   Int
-  usedAt     DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Promotion {
+  id                String          @unique @default(uuid())
+  promotion_id      Int             @id @default(autoincrement())
+  name              String
+  description       String?
+  type              PromotionType
+  status            PromotionStatus @default(ACTIVE)
+  buyQuantity       Int
+  getQuantity       Int
+  priority          Int             @default(0)
+  validFrom         DateTime
+  validTo           DateTime
+  usageLimit        Int?
+  usedCount         Int             @default(0)
+  perUserLimit      Int?
+  minPurchaseAmount Float?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  coupon     Coupon @relation(fields: [coupon_id], references: [coupon_id])
-  user       User   @relation(fields: [user_id], references: [user_id])
-  order      Order  @relation(fields: [order_id], references: [order_id])
+  eligibleProducts PromotionEligibleProduct[]
+  freeProducts     PromotionFreeProduct[]
+  redemptions      PromotionRedemption[]
+
+  @@index([status])
+  @@index([validFrom, validTo])
+}
+
+model PromotionEligibleProduct {
+  id                         String   @unique @default(uuid())
+  promotion_eligible_prod_id Int      @id @default(autoincrement())
+  promotion_id               Int
+  product_id                 Int
+  category_id                Int?
+  createdAt                  DateTime @default(now())
+
+  promotion Promotion @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade)
+  product   Product   @relation("EligibleProducts", fields: [product_id], references: [product_id], onDelete: Cascade)
+  category  Category? @relation("EligibleCategory", fields: [category_id], references: [category_id], onDelete: Cascade)
+
+ 
+  @@index([promotion_id])
+}
+
+model PromotionFreeProduct {
+  id                     String   @unique @default(uuid())
+  promotion_free_prod_id Int      @id @default(autoincrement())
+  promotion_id           Int
+  product_id             Int?
+  size_variant_id        Int?
+  maxQuantity            Int?
+  displayOrder           Int      @default(0)
+  createdAt              DateTime @default(now())
+
+  promotion   Promotion           @relation(fields: [promotion_id], references: [promotion_id], onDelete: Cascade)
+  product     Product?            @relation("FreeProducts", fields: [product_id], references: [product_id], onDelete: Cascade)
+  sizeVariant ProductSizeVariant? @relation("FreeSizeVariants", fields: [size_variant_id], references: [product_size_var_id], onDelete: Cascade)
+
+  @@unique([promotion_id, product_id, size_variant_id])
+  @@index([promotion_id])
+}
+
+model PromotionRedemption {
+  id                      String   @unique @default(uuid())
+  promotion_redemption_id Int      @id @default(autoincrement())
+  promotion_id            Int
+  order_id                Int
+  user_id                 Int
+  purchasedQuantity       Int
+  freeQuantity            Int
+  appliedAt               DateTime @default(now())
+  createdAt               DateTime @default(now())
+
+  promotion Promotion           @relation(fields: [promotion_id], references: [promotion_id], onDelete: Restrict)
+  order     Order               @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
+  user      User                @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  freeItems PromotionFreeItem[]
+
+  @@index([promotion_id])
+  @@index([user_id])
+  @@index([order_id])
+}
+
+model PromotionFreeItem {
+  id                     String   @unique @default(uuid())
+  promotion_free_item_id Int      @id @default(autoincrement())
+  redemption_id          Int
+  product_id             Int?
+  size_variant_id        Int?
+  quantity               Int      @default(1)
+  createdAt              DateTime @default(now())
+
+  redemption  PromotionRedemption @relation(fields: [redemption_id], references: [promotion_redemption_id], onDelete: Cascade)
+  product     Product?            @relation("SelectedFreeProducts", fields: [product_id], references: [product_id], onDelete: Cascade)
+  sizeVariant ProductSizeVariant? @relation("SelectedFreeSizeVariants", fields: [size_variant_id], references: [product_size_var_id], onDelete: Cascade)
+
+  @@index([redemption_id])
+}
+
+//=============> For Notification Schema <================================================
+
+model NotificationTemplate {
+  template_id Int              @id @default(autoincrement())
+  type        NotificationType @unique
+  title       String
+  message     String           @db.Text
+  icon        String?
+  priority    NotificationPriority @default(MEDIUM)
+  isActive    Boolean          @default(true)
+  expiryDays  Int              @default(90)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  notifications Notification[]
+  
+  @@index([type, isActive])
+  @@map("notification_templates")
+}
+
+model Notification {
+  notification_id Int                  @id @default(autoincrement())
+  template_id     Int?
+  type            NotificationType
+  priority        NotificationPriority @default(MEDIUM)
+  status          NotificationStatus   @default(ACTIVE)
+  title           String
+  message         String               @db.Text
+  icon            String?
+  referenceType   ReferenceType?
+  referenceId     String?
+  actionUrl       String?
+  actionLabel     String?
+  metadata        Json?                @db.JsonB
+  createdAt       DateTime             @default(now())
+  expiresAt       DateTime?
+  
+  template        NotificationTemplate? @relation(fields: [template_id], references: [template_id])
+  recipients      NotificationRecipient[]
+  batches         NotificationBatch[]
+  
+  @@index([type, status, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model NotificationRecipient {
+  recipient_id    Int          @id @default(autoincrement())
+  notification_id Int
+  user_id         Int
+  isRead          Boolean      @default(false)
+  readAt          DateTime?
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  
+  notification    Notification @relation(fields: [notification_id], references: [notification_id], onDelete: Cascade)
+  user            User         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  
+  @@unique([notification_id, user_id])
+  @@index([user_id, isRead, isDeleted, createdAt(sort: Desc)])
+  @@map("notification_recipients")
+}
+
+model NotificationStats {
+  stats_id           Int       @id @default(autoincrement())
+  user_id            Int       @unique
+  unreadCount        Int       @default(0)
+  totalCount         Int       @default(0)
+  lastNotificationAt DateTime?
+  lastReadAt         DateTime?
+  updatedAt          DateTime  @updatedAt
+  
+  user               User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  
+  @@map("notification_stats")
+}
+
+model NotificationPreference {
+  preference_id     Int       @id @default(autoincrement())
+  user_id           Int       @unique
+  enabled           Boolean   @default(true)
+  typePreferences   Json?     @db.JsonB
+  maxPerDay         Int?      @default(20)
+  quietHoursEnabled Boolean   @default(false)
+  quietHoursStart   String?
+  quietHoursEnd     String?
+  timezone          String    @default("Asia/Kolkata")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  user              User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  
+  @@map("notification_preferences")
+}
+
+model NotificationBatch {
+  batch_id        Int          @id @default(autoincrement())
+  notification_id Int
+  targetType      String
+  totalUsers      Int
+  processedUsers  Int          @default(0)
+  successCount    Int          @default(0)
+  failedCount     Int          @default(0)
+  status          BatchStatus  @default(PENDING)
+  createdAt       DateTime     @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  notification    Notification @relation(fields: [notification_id], references: [notification_id], onDelete: Cascade)
+  
+  @@map("notification_batches")
 }

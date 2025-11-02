@@ -11,9 +11,10 @@ import _ from 'lodash';
 
 import { IEmailService } from '../../interfaces/send-mail-service.interface';
 import { PrismaClient } from '@prisma/client';
+import { ICouponService } from '../../interfaces/ICouponService.interface';
 
 @injectable()
-export class CuponService implements IService {
+export class CuponService implements ICouponService, IService {
   static dependencies = ['LoggerService', 'DatabaseService', 'ConfigService', 'EmailService'];
   static optionalDependencies: string[] = [];
 
@@ -831,7 +832,7 @@ export class CuponService implements IService {
         data: {
           coupon_id: updatedCoupon.coupon_id, // Use 'id' instead of 'coupon_id'
           user_id: userExist.data[0].user_id,
-          order_id: 142,
+          order_id: orderId,
         },
       });
 

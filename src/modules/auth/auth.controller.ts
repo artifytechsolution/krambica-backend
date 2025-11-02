@@ -79,9 +79,17 @@ export class AuthController {
       }
     }
   }
-  async update(req: Request, res: Response) {
-    const item = await this.authService.update(parseInt(req.params.id), req.body);
-    res.json(ResponseUtil.success(item, 'Auth updated'));
+  async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await this.authService.update(req.params.id, req.body);
+      res.status(201).json(ResponseUtil.success(item, 'Auth updated'));
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(
+          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+        );
+      }
+    }
   }
   async sendOtp(req: Request, res: Response, next: NextFunction) {
     try {
@@ -98,8 +106,16 @@ export class AuthController {
     }
   }
 
-  async delete(req: Request, res: Response) {
-    await this.authService.delete(parseInt(req.params.id));
-    res.json(ResponseUtil.success(null, 'Auth deleted'));
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      await this.authService.delete(req.params.id);
+      res.status(201).json(ResponseUtil.success({}, 'user deleted successfully'));
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(
+          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+        );
+      }
+    }
   }
 }

@@ -10,7 +10,7 @@ import Encryptpassword from '../../utils/encryptpasswors';
 import { User } from '../../generated/prisma';
 import JwtToken from '../../utils/jwtToken.utils';
 import { IConfigService } from '../../services/config.service';
-import _ from 'lodash';
+import _, { add, omit } from 'lodash';
 
 import { IEmailService } from '../../interfaces/send-mail-service.interface';
 
@@ -62,7 +62,7 @@ export class AuthService implements IService, IAuthService {
     console.log(user);
 
     if (!user || !user.data || user.data.length === 0) {
-      throw new InvalidInputError('user is not exist');
+      throw new InvalidInputError('user is not exist 123');
     }
 
     const foundUser = user.data[0];
@@ -143,9 +143,17 @@ export class AuthService implements IService, IAuthService {
       );
     }
     return {
-      user: {
-        ...foundUser,
-      },
+      user: _.omit(foundUser, [
+        'refreshToken',
+        'Otp',
+        'is_verified',
+        'createdAt',
+        'updatedAt',
+        'deletedAt',
+        'salt',
+        'password',
+      ]),
+
       token: {
         acessToken: accessToken,
         refreshToken: refreshTokenData,
@@ -239,6 +247,10 @@ export class AuthService implements IService, IAuthService {
         'user',
         {
           operation: PrismaOperationType.READ,
+          include: {
+            profile: true,
+            addresses: true,
+          },
         },
         this.db.client,
         this.logger,
@@ -345,22 +357,70 @@ export class AuthService implements IService, IAuthService {
     }
   }
 
-  async update(
-    id: number,
-    data: Partial<Omit<Auth, 'id' | 'createdAt'>>,
-  ): Promise<Auth | undefined> {
-    const item = this.auth.find((r) => r.id === id);
-    if (!item) throw new InvalidInputError('Auth not found');
-    Object.assign(item, data);
-    return item;
+  async update(id: string, data: any): Promise<any> {
+    const user = await this.db.client.user.findUnique({
+      where: { id: id, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new InvalidInputError('User not found');
+    }
+
+    // If updating email, check if new email already exists
+    if (data.email && data.email !== user.email) {
+      const existingUser = await this.db.client.user.findUnique({
+        where: { email: data.email },
+      });
+
+      if (existingUser) {
+        throw new InvalidInputError('Email already in use');
+      }
+    }
+
+    // Update user
+    const updateddata = await this.db.client.user.update({
+      where: { user_id: user.user_id },
+      data: {
+        ...data,
+        updatedAt: new Date(),
+      },
+      include: {
+        profile: true,
+      },
+    });
+    return _.omit(updateddata, [
+      'refreshToken',
+      'Otp',
+      'is_verified',
+      'createdAt',
+      'updatedAt',
+      'deletedAt',
+      'salt',
+      'password',
+    ]);
   }
 
-  async delete(id: number): Promise<boolean> {
-    const index = this.auth.findIndex((r) => r.id === id);
-    if (index === -1) throw new InvalidInputError('Auth not found');
-    this.auth.splice(index, 1);
+  async delete(id: string): Promise<boolean> {
+    // Check if user exists
+    const user = await this.db.client.user.findUnique({
+      where: { id: id, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new InvalidInputError('User not found');
+    }
+
+    // Soft delete - set deletedAt timestamp
+    await this.db.client.user.update({
+      where: { user_id: user.user_id },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
     return true;
   }
+
   generateOtp() {
     return Math.floor(100000 + Math.random() * 900000).toString(); // ensures 6-digit OTP
   }

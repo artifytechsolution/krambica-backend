@@ -2,7 +2,6 @@ import { injectable } from '../../services/di-container';
 import { IService } from '../../interfaces/service.interface';
 import { ILoggerService } from '../../services/logger.service';
 import { IProductsService } from '../../interfaces/products-service.interface';
-import { Product } from './products.types';
 import { InvalidInputError } from '../../utils/error.utils';
 import { executePrismaOperation, PrismaOperationType } from '../../utils/prisma.utils';
 import { IDatabaseService } from '../../interfaces/database-service.interface';
@@ -16,10 +15,7 @@ import fs from 'fs';
 export class ProductsService implements IService, IProductsService {
   static dependencies = ['LoggerService', 'DatabaseService', 'ConfigService', 'AuthService'];
   static optionalDependencies: string[] = [];
-  private products: Product[] = [
-    { id: 1, name: 'Sample Product 1', createdAt: new Date().toISOString() },
-    { id: 2, name: 'Sample Product 2', createdAt: new Date().toISOString() },
-  ];
+
   private logger: ILoggerService;
   private db: IDatabaseService;
   private config: IConfigService;
@@ -37,10 +33,28 @@ export class ProductsService implements IService, IProductsService {
     this.config = config;
     this.auth = auth;
   }
+  createproductvariant(data: any): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  deleteProductVariant(id: string): Promise<any> {
+    throw new Error('Method not implemented.');
+  }
+  async getProductVariantById(id: string | number): Promise<any> {
+    const variant = await this.db.client.productSizeVariant.findMany({
+      where: {
+        id: id,
+      },
+    });
+    console.log('variant is herere');
+    console.log(variant);
+    return variant;
+  }
 
   async initialize() {
-    this.logger.info('ProductsService initialized with in-memory data');
+    this.logger.info('ProductsService initialized');
   }
+
+  // =================== BASIC PRODUCT CRUD ===================
 
   async getAll(): Promise<any> {
     try {
@@ -48,21 +62,24 @@ export class ProductsService implements IService, IProductsService {
         'product',
         {
           operation: PrismaOperationType.READ,
+          where: {
+            deletedAt: null,
+          },
           include: {
             reviews: true,
             category: true,
-            images: {
-              where: {
-                isPrimary: true,
+            colors: {
+              include: {
+                images: { where: { isPrimary: true }, take: 1 },
+                sizeVariants: true,
               },
             },
+            images: { where: { isPrimary: true } },
           },
         },
         this.db.client,
         this.logger,
       );
-      console.log('products is commingg------------');
-      console.log(products);
       return products;
     } catch (error: any) {
       throw new InvalidInputError(error.message);
@@ -80,26 +97,27 @@ export class ProductsService implements IService, IProductsService {
         throw new InvalidInputError('Invalid ID: must be a UUID string or numeric product_id');
       }
 
-      console.log(where);
-
-      const products = await executePrismaOperation<any>(
+      const product = await executePrismaOperation<any>(
         'product',
         {
           operation: PrismaOperationType.READ_UNIQUE,
-          where: where,
+          where,
           include: {
             reviews: true,
             category: true,
             images: true,
-            variants: {
-              include: { unit: true },
+            colors: {
+              include: {
+                images: true,
+                sizeVariants: true,
+              },
             },
           },
         },
         this.db.client,
         this.logger,
       );
-      return products;
+      return product;
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
@@ -107,52 +125,58 @@ export class ProductsService implements IService, IProductsService {
 
   async create(data: any): Promise<any> {
     try {
+      const { category_id, ...maindata } = data;
+
+      const category = await this.db.client.category.findUnique({
+        where: {
+          id: data.category_id,
+        },
+      });
+      console.log('category finally found---');
+      console.log(category.category_id);
+      if (!category) {
+        throw new InvalidInputError('Category does not exist');
+      }
+      const result = { maindata };
+      console.log('main object is commingg');
+      console.log(result);
       const product = await executePrismaOperation<any>(
         'product',
         {
           operation: PrismaOperationType.CREATE,
-          data: {
-            ...data,
-          },
+          data: { category_id: category.category_id, ...maindata },
         },
         this.db.client,
         this.logger,
       );
+      console.log('product created---');
+      console.log(product);
       return product;
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
   }
 
-  async update(id: string, data: any, extraParameters?: any): Promise<any> {
+  async update(id: string, data: any): Promise<any> {
     try {
-      const productisExist = await executePrismaOperation<any>(
+      const productExists = await executePrismaOperation<any>(
         'product',
         {
           operation: PrismaOperationType.READ_FIRST,
-          where: {
-            id: id,
-          },
+          where: { id },
         },
         this.db.client,
         this.logger,
       );
-      console.log('product is exist---------------');
-      console.log(productisExist);
-      if (!productisExist) {
-        throw new InvalidInputError('product is not Exist');
+      if (!productExists) {
+        throw new InvalidInputError('Product does not exist');
       }
       const product = await executePrismaOperation(
         'product',
         {
           operation: PrismaOperationType.UPDATE,
-          where: {
-            id: productisExist.data.id,
-          },
-          data: {
-            ...data,
-            ...extraParameters,
-          },
+          where: { id: productExists.data.id },
+          data,
         },
         this.db.client,
         this.logger,
@@ -163,279 +187,156 @@ export class ProductsService implements IService, IProductsService {
     }
   }
 
-  async delete(id: number): Promise<boolean> {
-    const index = this.products.findIndex((r) => r.id === id);
-    if (index === -1) throw new InvalidInputError('Product not found');
-    this.products.splice(index, 1);
-    return true;
+  async delete(id: string): Promise<boolean> {
+    try {
+      // Soft delete: mark as deleted instead of removing
+      const findprouct = await this.db.client.product.findUnique({
+        where: { id },
+      });
+      if (!findprouct) {
+        throw new InvalidInputError('Product does not exist');
+      }
+      await this.db.client.product.update({
+        where: { product_id: findprouct.product_id },
+        data: { deletedAt: new Date() },
+      });
+
+      return true;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
   }
 
-  async createproductvariant(data: any) {
-    try {
-      const product = await executePrismaOperation<any>(
-        'product',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where: {
-            id: data.product_id,
-          },
-        },
-        this.db.client,
-        this.logger,
-      );
+  // =================== PRODUCT COLOR MANAGEMENT ===================
 
+  async getAllColorsByProduct(productId: string): Promise<any> {
+    try {
+      const product: any = await this.getById(productId);
+      console.log('product.data.product_id is here');
+      console.log(product);
       if (!product) {
-        throw new InvalidInputError('product is not Exist');
+        throw new InvalidInputError('Product does not exist');
       }
-      const unit = await executePrismaOperation<any>(
-        'unit',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where: {
-            unit_id: parseInt(data.unit_id),
-          },
+
+      const colors = await this.db.client.productColor.findMany({
+        where: { product_id: product.data.product_id },
+        include: {
+          images: { where: { isPrimary: true }, take: 1 },
+          sizeVariants: true,
         },
-        this.db.client,
-        this.logger,
-      );
-      console.log('unit is commig-------------');
-      console.log(unit);
-      if (!unit) {
-        throw new InvalidInputError('invalid unit Input');
-      }
-      const Productvariant = await executePrismaOperation<any>(
-        'ProductVariant',
-        {
-          operation: PrismaOperationType.CREATE,
-          data: {
-            ...data,
-            product_id: product.data.product_id,
-          },
-        },
-        this.db.client,
-        this.logger,
-      );
-      await this.update(
-        product.data.id,
-        {},
-        {
-          stock: {
-            increment: Productvariant.data.stock,
-          },
-        },
-      );
-      return Productvariant;
+      });
+      return { success: true, data: colors, count: colors.length };
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
   }
 
-  async deleteProductVariant(Id: string) {
+  async createColor(data: any): Promise<any> {
     try {
-      const productVariant = await executePrismaOperation<any>(
-        'ProductVariant',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where: { id: Id },
-        },
-        this.db.client,
-        this.logger,
-      );
-      if (!productVariant || !productVariant.data) {
-        throw new InvalidInputError('Product variant does not exist.');
+      const product: any = await this.getById(data.product_id);
+      console.log('product.data.product_id is here');
+      console.log(product);
+      if (!product) {
+        throw new InvalidInputError('Product does not exist');
       }
-      const product = await this.getById(productVariant.data.product_id);
-      if (!product || !product.data) {
-        throw new InvalidInputError('Associated product not found.');
-      }
-      await this.update(
-        product.data.id,
-        {},
-        {
-          stock: {
-            decrement: productVariant.data.stock,
-          },
+      const color = await this.db.client.productColor.create({
+        data: {
+          product_id: product.data.product_id,
+          color_name: data.color_name,
+          color_code: data.color_code,
+          isAvailable: data.isAvailable ?? true,
+          displayOrder: data.displayOrder ?? 0,
         },
-      );
-      const deletedVariant = await executePrismaOperation<any>(
-        'ProductVariant',
-        {
-          operation: PrismaOperationType.DELETE,
-          where: { id: Id },
-        },
-        this.db.client,
-        this.logger,
-      );
-
-      return deletedVariant;
-    } catch (error: any) {
-      throw new InvalidInputError(error.message || 'Failed to delete product variant.');
-    }
-  }
-
-  async getProductVariantById(id: any): Promise<any> {
-    try {
-      let where: any;
-      if (typeof id === 'string' && isUUID(id)) {
-        console.log('uuid is herererrerererer--------');
-        where = { id: id };
-      } else if (!isNaN(Number(id))) {
-        console.log('variance id is hereeeee------------');
-        where = { variant_id: Number(id) };
-      } else {
-        throw new InvalidInputError('Invalid ID: must be a UUID string or numeric product_id');
-      }
-
-      const productsvariant = await executePrismaOperation<any>(
-        'ProductVariant',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where: where,
-        },
-        this.db.client,
-        this.logger,
-      );
-      console.log(productsvariant);
-      // if (productsvariant.data == null) {
-      //   throw new InvalidInputError('variance not found');
-      // }
-      return productsvariant;
+      });
+      return { success: true, data: color };
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
   }
 
-  /**
-   * Upload single product image
-   */
-  async uploadSingleImage(uploadData: {
-    product_id: number;
-    altText?: string;
-    isPrimary?: boolean;
-    file: Express.Multer.File;
-  }) {
+  async updateColor(colorId: string, data: any): Promise<any> {
     try {
-      const { file, ...data } = uploadData;
-      console.log('uploaded data is here-------->');
-      console.log(data);
-      console.log(`🚀 Starting Cloudinary upload for: ${file.originalname}`);
-      console.log(`📁 Local file path: ${file.path}`);
-      // const product: any = await executePrismaOperation(
-      //   'Product',
-      //   {
-      //     operation: PrismaOperationType.READ_UNIQUE,
-      //     where: {
-      //       id: data.product_id,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
-      console.log('product id is heree---->');
-      console.log(data.product_id);
-      const product = await this.db.client.product.findUnique({
+      const productcolur: any = await this.db.client.ProductColor.findUnique({
         where: {
-          id: data.product_id,
+          id: colorId,
         },
       });
-      console.log(product);
-      if (!product) {
-        throw new InvalidInputError('product not found');
+
+      if (!productcolur) {
+        throw new InvalidInputError('Product does not exist');
       }
-      console.log('product data is commingg-------->');
-      console.log(product);
-
-      // Step 1: Upload to Cloudinary from local file
-      const cloudinaryResult = (await cloudinary.uploader.upload(file.path, {
-        folder: 'products',
-        public_id: `product_${product.product_id}_${Date.now()}`,
-        transformation: [
-          { width: 1000, height: 1000, crop: 'limit' },
-          { quality: 'auto' },
-          { format: 'auto' },
-        ],
-        resource_type: 'image',
-      })) as any;
-
-      console.log(`☁️ Cloudinary upload successful:`);
-      console.log(`   URL: ${cloudinaryResult.secure_url}`);
-      console.log(`   Public ID: ${cloudinaryResult.public_id}`);
-      console.log(`   Size: ${cloudinaryResult.bytes} bytes`);
-      console.log('data is comming --------->');
-      console.log({
-        product_id: product.product_id,
-        url: cloudinaryResult.secure_url,
-        altText: data.altText || file.originalname,
-        isPrimary: data.isPrimary || false,
+      const color = await this.db.client.productColor.update({
+        where: { product_color_id: productcolur.product_color_id },
+        data: { ...data, updatedAt: new Date() },
       });
-
-      // Step 2: Save to database
-      // const productImage = await executePrismaOperation(
-      //   'ProductImage', // must exactly match Prisma client delegate
-      //   {
-      //     operation: PrismaOperationType.CREATE,
-      //     data: {
-      //       product_id: data.product_id,
-      //       url: cloudinaryResult.secure_url,
-      //       altText: data.altText || file.originalname,
-      //       isPrimary: data.isPrimary || false,
-      //     },
-      //   },
-      //   this.db, // your PrismaClient instance
-      //   this.logger, // logger service
-      // );
-      const productImage = await this.db.client.productImage.create({
-        data: {
-          product_id: product.product_id,
-          url: cloudinaryResult.secure_url,
-          altText: data.altText || file.originalname,
-          isPrimary: data.isPrimary || false,
-        },
-      });
-      console.log('image created sucessfully --------->>>>');
-      console.log(productImage);
-      // Step 3: Clean up local file
-      await this.cleanupLocalFile(file.path);
-
-      return {
-        success: true,
-        data: {
-          ...productImage,
-          cloudinary: {
-            public_id: cloudinaryResult.public_id,
-            width: cloudinaryResult.width,
-            height: cloudinaryResult.height,
-            format: cloudinaryResult.format,
-            bytes: cloudinaryResult.bytes,
-          },
-        },
-        message: 'Image uploaded successfully',
-      };
-    } catch (error) {
-      console.error(`❌ Upload pipeline failed for ${uploadData.file.originalname}:`, error);
-
-      // Clean up local file on error
-      await this.cleanupLocalFile(uploadData.file.path);
-
-      throw new Error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return { success: true, data: color };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
     }
   }
 
-  /**
-   * Upload multiple images in sequence
-   */
-  async uploadMultipleImages(uploadData: { product_id: number; files: Express.Multer.File[] }) {
-    const { files, product_id } = uploadData;
-    console.log('product id is heree------>');
-    console.log(product_id);
-    console.log(`📸 Starting batch upload of ${files.length} files for product ${product_id}`);
-    // const product = await this.db.client.product.findUnique({
-    //   where: {
-    //     id: product_id,
-    //   },
-    // });
-    // console.log('product is comming 1234------>');
-    // console.log(product);
+  async deleteColor(colorId: string): Promise<boolean> {
+    try {
+      const productcolur: any = await this.db.client.ProductColor.findUnique({
+        where: {
+          id: colorId,
+        },
+      });
+
+      if (!productcolur) {
+        throw new InvalidInputError('Product does not exist');
+      }
+      await this.db.client.productColor.delete({
+        where: { product_color_id: productcolur.product_color_id },
+      });
+      return true;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  // =================== PRODUCT COLOR IMAGES ===================
+
+  async getColorImages(colorId: string): Promise<any> {
+    try {
+      const productcolur: any = await this.db.client.ProductColor.findUnique({
+        where: {
+          id: colorId,
+        },
+      });
+
+      if (!productcolur) {
+        throw new InvalidInputError('Product does not exist');
+      }
+      const images = await this.db.client.productColorImage.findMany({
+        where: { product_color_id: productcolur.product_color_id },
+        orderBy: [{ isPrimary: 'desc' }, { displayOrder: 'asc' }],
+      });
+      return { success: true, data: images, count: images.length };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async uploadMultipleColorImages(uploadData: {
+    product_color_id: string;
+    files: Express.Multer.File[];
+  }): Promise<any> {
+    const { files, product_color_id } = uploadData;
+
+    console.log('Starting batch upload for color:', product_color_id);
+    console.log(`Total files to upload: ${files.length}`);
+
+    // Verify color exists first
+    const color = await this.db.client.productColor.findUnique({
+      where: { id: product_color_id },
+    });
+
+    console.log('Color found:', color);
+
+    if (!color) {
+      throw new InvalidInputError('Product color not found');
+    }
 
     const results: any[] = [];
     const errors: any[] = [];
@@ -446,17 +347,43 @@ export class ProductsService implements IService, IProductsService {
       try {
         console.log(`\n🔄 Processing file ${i + 1}/${files.length}: ${file.originalname}`);
 
-        const result = await this.uploadSingleImage({
-          product_id: product_id,
-          altText: file.originalname,
-          isPrimary: i === 0, // First image is primary
-          file,
+        // Upload to Cloudinary
+        const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+          folder: 'products/colors',
+          public_id: `color_${color.product_color_id}_${Date.now()}_${i}`,
+          transformation: [
+            { width: 1000, height: 1000, crop: 'limit' },
+            { quality: 'auto' },
+            { format: 'auto' },
+          ],
+          resource_type: 'auto',
         });
 
-        results.push(result.data);
+        console.log(`☁️ Cloudinary upload successful for file ${i + 1}`);
+        console.log(`   URL: ${cloudinaryResult.secure_url}`);
+
+        // Save to database
+        const colorImage = await this.db.client.productColorImage.create({
+          data: {
+            product_color_id: color.product_color_id,
+            url: cloudinaryResult.secure_url,
+            altText: file.originalname,
+            isPrimary: i === 0, // First image is primary
+            displayOrder: i,
+          },
+        });
+
+        // Clean up local file
+        await this.cleanupLocalFile(file.path);
+
+        results.push(colorImage);
         console.log(`✅ File ${i + 1}/${files.length} completed successfully`);
       } catch (error) {
         console.error(`❌ File ${i + 1}/${files.length} failed: ${file.originalname}`, error);
+
+        // Clean up local file even on error
+        await this.cleanupLocalFile(file.path);
+
         errors.push({
           filename: file.originalname,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -481,373 +408,491 @@ export class ProductsService implements IService, IProductsService {
     };
   }
 
-  /**
-   * Get all images for a product
-   */
-  async getProductImages(product_id: number) {
+  //here not upadte image
+  async updateColorImage(imageId: number, updateData: any): Promise<any> {
+    console.log('image id is ghererere----->');
+    console.log(imageId);
     try {
-      // const images: any = await executePrismaOperation(
-      //   'ProductImage',
-      //   {
-      //     operation: PrismaOperationType.Rea,
-      //     where: {
-      //       product_id,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
-      const images: any = await this.db.client.productImage.findMany({
+      const image = await this.db.client.productColorImage.update({
+        where: { id: imageId },
+        data: { ...updateData, updatedAt: new Date() },
+      });
+      return { success: true, data: image };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async deleteColorImage(imageId: number): Promise<boolean> {
+    try {
+      const image = await this.db.client.productColorImage.findUnique({
+        where: { id: imageId },
+      });
+      if (!image) {
+        throw new InvalidInputError('Image not found');
+      }
+
+      const publicId = this.extractPublicIdFromUrl(image.url);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+      }
+
+      await this.db.client.productColorImage.delete({
+        where: { id: imageId },
+      });
+      return true;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  // =================== PRODUCT SIZE VARIANTS ===================
+
+  async getSizeVariantsByColor(colorId: string): Promise<any> {
+    try {
+      const isAvailable = await this.db.client.ProductColor.findUnique({
         where: {
-          product_id,
+          id: colorId,
+        },
+      });
+      const variants = await this.db.client.productSizeVariant.findMany({
+        where: { product_color_id: isAvailable.product_color_id },
+        orderBy: { size: 'asc' },
+      });
+      return { success: true, data: variants, count: variants.length };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async createSizeVariant(data: any): Promise<any> {
+    try {
+      console.log('data is here----->');
+      console.log(data);
+      const color: any = await this.db.client.productColor.findUnique({
+        where: { id: data.product_color_id },
+      });
+      console.log('color is commingggg----->');
+      console.log(typeof color.product_color_id);
+      if (!color) {
+        throw new InvalidInputError('Product color does not exist');
+      }
+
+      const variant = await this.db.client.productSizeVariant.create({
+        data: {
+          product_color_id: color.product_color_id,
+          size: data.size,
+          sku: data.sku,
+          price: data.price,
+          stock: data.stock || 0,
+          availableStock: data.stock || 0,
+          lowStockThreshold: data.lowStockThreshold || 5,
+          isAvailable: data.isAvailable ?? true,
         },
       });
 
-      // const images: any = await executePrismaOperation(
-      //   'productImage',
-      //   {
-      //     operation: PrismaOperationType.READ,
-      //     where: {
-      //       product_id: product_id,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
+      // Update color total stock
+      await this.updateColorTotalStock(color.product_color_id);
+
+      return { success: true, data: variant };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async updateSizeVariant(variantId: string, data: any): Promise<any> {
+    try {
+      const variant = await this.db.client.productSizeVariant.update({
+        where: { id: variantId },
+        data: { ...data, updatedAt: new Date() },
+      });
+
+      // Update color total stock if stock changed
+      if (data.stock !== undefined) {
+        const variantData = await this.db.client.productSizeVariant.findUnique({
+          where: { id: variantId },
+        });
+        if (variantData) {
+          await this.updateColorTotalStock(variantData.product_color_id);
+        }
+      }
+
+      return { success: true, data: variant };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async deleteSizeVariant(variantId: string): Promise<boolean> {
+    try {
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
+      }
+
+      await this.db.client.productSizeVariant.delete({
+        where: { id: variantId },
+      });
+
+      // Update color total stock
+      await this.updateColorTotalStock(variant.product_color_id);
+
+      return true;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  // =================== PRODUCT IMAGES (General) ===================
+
+  async uploadSingleImage(uploadData: {
+    product_id: number;
+    altText?: string;
+    isPrimary?: boolean;
+    file: Express.Multer.File;
+  }) {
+    try {
+      const { file, ...data } = uploadData;
+
+      const product = await this.db.client.product.findUnique({
+        where: { id: data.product_id },
+      });
+      if (!product) {
+        throw new InvalidInputError('Product not found');
+      }
+
+      const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+        folder: 'products',
+        public_id: `product_${product.product_id}_${Date.now()}`,
+        transformation: [
+          { width: 1000, height: 1000, crop: 'limit' },
+          { quality: 'auto' },
+          { format: 'auto' },
+        ],
+        resource_type: 'image',
+      });
+
+      const productImage = await this.db.client.productImage.create({
+        data: {
+          product_id: product.product_id,
+          url: cloudinaryResult.secure_url,
+          altText: data.altText || file.originalname,
+          isPrimary: data.isPrimary || false,
+        },
+      });
+
+      await this.cleanupLocalFile(file.path);
 
       return {
         success: true,
-        data: images,
-        count: images.length,
+        data: {
+          ...productImage,
+          cloudinary: {
+            public_id: cloudinaryResult.public_id,
+            width: cloudinaryResult.width,
+            height: cloudinaryResult.height,
+            format: cloudinaryResult.format,
+            bytes: cloudinaryResult.bytes,
+          },
+        },
+        message: 'Image uploaded successfully',
       };
     } catch (error) {
-      console.error('Error fetching product images:', error);
+      await this.cleanupLocalFile(uploadData.file.path);
+      throw new Error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async uploadMultipleImages(uploadData: { product_id: number; files: Express.Multer.File[] }) {
+    const { files, product_id } = uploadData;
+    const results: any[] = [];
+    const errors: any[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const result = await this.uploadSingleImage({
+          product_id,
+          altText: file.originalname,
+          isPrimary: i === 0,
+          file,
+        });
+        results.push(result.data);
+      } catch (error) {
+        errors.push({
+          filename: file.originalname,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      success: results.length > 0,
+      data: results,
+      errors,
+      summary: {
+        total: files.length,
+        uploaded: results.length,
+        failed: errors.length,
+      },
+    };
+  }
+
+  async getProductImages(product_id: string) {
+    try {
+      const exist = await this.getById(product_id);
+      const images = await this.db.client.productImage.findMany({
+        where: { product_id: exist.data.product_id },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      });
+      return { success: true, data: images, count: images.length };
+    } catch (error) {
       throw new Error('Failed to fetch product images');
     }
   }
 
-  /**
-   * Delete a product image
-   */
   async deleteProductImage(imageId: number) {
     try {
-      // const image: any = await executePrismaOperation(
-      //   'ProductImage',
-      //   {
-      //     operation: PrismaOperationType.READ_UNIQUE,
-      //     where: {
-      //       id: imageId,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
-      const image: any = await this.db.client.productImage.findUnique({
-        where: {
-          id: imageId,
-        },
+      const image = await this.db.client.productImage.findUnique({
+        where: { id: imageId },
       });
-
       if (!image) {
         throw new Error('Image not found in database');
       }
 
-      // Extract public_id from Cloudinary URL
-      const publicId: any = this.extractPublicIdFromUrl(image.url);
-
+      const publicId = this.extractPublicIdFromUrl(image.url);
       if (publicId) {
-        console.log(`🗑️ Deleting from Cloudinary: ${publicId}`);
-        const cloudinaryResult = await cloudinary.uploader.destroy(publicId);
-        console.log(`☁️ Cloudinary deletion result:`, cloudinaryResult);
+        await cloudinary.uploader.destroy(publicId);
       }
 
-      // await executePrismaOperation(
-      //   'productImage',
-      //   {
-      //     operation: PrismaOperationType.DELETE,
-      //     where: {
-      //       id: imageId,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
       await this.db.client.productImage.delete({
-        where: {
-          id: imageId,
-        },
+        where: { id: imageId },
       });
 
-      console.log(`💾 Database record deleted - ID: ${imageId}`);
-
-      return {
-        success: true,
-        message: 'Image deleted successfully',
-      };
+      return { success: true, message: 'Image deleted successfully' };
     } catch (error) {
-      console.error('Error deleting image:', error);
       throw new Error(
         `Failed to delete image: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
 
-  /**
-   * Set primary image for a product
-   */
   async setPrimaryProductImage(imageId: number) {
     try {
-      // const image: any = await executePrismaOperation(
-      //   'ProductImage',
-      //   {
-      //     operation: PrismaOperationType.READ_UNIQUE,
-      //     where: {
-      //       id: imageId,
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
-      const image: any = this.db.client.productImage.findUnique({
-        where: {
-          id: imageId,
-        },
+      const image = await this.db.client.productImage.findUnique({
+        where: { id: imageId },
       });
       if (!image) {
         throw new Error('Image not found in database');
       }
-      // Update in transaction
+
       await this.db.client.$transaction(async (tx: any) => {
-        // Remove primary status from all images of this product
         await tx.productImage.updateMany({
           where: { product_id: image.product_id },
           data: { isPrimary: false },
         });
-
-        // Set the selected image as primary
         await tx.productImage.update({
           where: { id: imageId },
           data: { isPrimary: true },
         });
       });
 
-      console.log(`🌟 Primary image set - ID: ${imageId}`);
-
-      return {
-        success: true,
-        message: 'Primary image updated successfully',
-      };
+      return { success: true, message: 'Primary image updated successfully' };
     } catch (error) {
-      console.error('Error setting primary image:', error);
       throw new Error('Failed to set primary image');
     }
   }
 
-  /**
-   * Update product image details
-   */
   async updateProductImage(imageId: number, updateData: any) {
     try {
-      // const image = await executePrismaOperation(
-      //   'ProductImage',
-      //   {
-      //     operation: PrismaOperationType.UPDATE,
-      //     where: { id: imageId },
-      //     data: {
-      //       ...updateData,
-      //       updatedAt: new Date(),
-      //     },
-      //   },
-      //   this.db,
-      //   this.logger,
-      // );
       const image = await this.db.client.productImage.update({
         where: { id: imageId },
-        data: {
-          ...updateData,
-          updatedAt: new Date(),
-        },
+        data: { ...updateData, updatedAt: new Date() },
       });
-
-      if (!image) {
-        throw new Error('Image not found or update failed');
-      }
-
-      console.log(`✅ Product image updated successfully - ID: ${imageId}`);
-
-      return {
-        success: true,
-        data: image,
-        message: 'Image updated successfully',
-      };
+      return { success: true, data: image, message: 'Image updated successfully' };
     } catch (error) {
-      console.error('Error updating product image:', error);
       throw new Error('Failed to update image');
     }
   }
 
-  // =================== HELPER METHODS ===================
+  // =================== STOCK AND INVENTORY MANAGEMENT ===================
 
-  /**
-   * Clean up local file
-   */
-  async cleanupLocalFile(filePath: string): Promise<void> {
+  async getStock(variantId: string): Promise<any> {
     try {
-      if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        console.log(`🧹 Local file cleaned up: ${filePath}`);
-      }
-    } catch (error) {
-      console.error(`⚠️ Failed to cleanup local file: ${filePath}`, error);
-    }
-  }
-
-  /**
-   * Extract public_id from Cloudinary URL
-   */
-  async extractPublicIdFromUrl(url: string) {
-    try {
-      const urlParts = url.split('/');
-      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-
-      if (uploadIndex !== -1 && urlParts.length > uploadIndex + 2) {
-        const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
-        // Remove file extension
-        const publicId = pathAfterUpload.replace(/\.[^/.]+$/, '');
-        return publicId;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error extracting public_id:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get product with images
-   */
-  async getProductWithImages(productId: number) {
-    try {
-      const product = await executePrismaOperation(
-        'Product',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where: { product_id: productId },
-          include: {
-            images: {
-              orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-            },
-          },
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+        select: {
+          stock: true,
+          reservedStock: true,
+          availableStock: true,
+          isLowStock: true,
+          lowStockThreshold: true,
         },
-        this.db,
-        this.logger,
-      );
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
+      }
+      return { success: true, data: variant };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
 
-      if (!product) {
-        throw new Error('Product not found');
+  async updateStock(variantId: string, newStock: number): Promise<any> {
+    try {
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
       }
 
-      return {
-        success: true,
-        data: product,
-        message: 'Product with images retrieved successfully',
-      };
-    } catch (error) {
-      console.error('Error fetching product with images:', error);
-      throw new Error('Failed to fetch product with images');
-    }
-  }
-
-  /**
-   * Get products with primary images only
-   */
-  async getProductsWithPrimaryImages() {
-    try {
-      const products: any = await executePrismaOperation(
-        'Product',
-        {
-          operation: PrismaOperationType.READ,
-          include: {
-            images: {
-              where: { isPrimary: true },
-              take: 1,
-            },
-          },
+      const updatedVariant = await this.db.client.productSizeVariant.update({
+        where: { id: variantId },
+        data: {
+          stock: newStock,
+          availableStock: newStock - variant.reservedStock,
+          isLowStock: newStock <= variant.lowStockThreshold,
         },
-        this.db,
-        this.logger,
-      );
+      });
 
-      return {
-        success: true,
-        data: products,
-        count: products.length,
-        message: 'Products with primary images retrieved successfully',
-      };
-    } catch (error) {
-      console.error('Error fetching products with primary images:', error);
-      throw new Error('Failed to fetch products with primary images');
-    }
-  }
-
-  /**
-   * Search products by name
-   */
-  async searchProducts(searchTerm: string) {
-    try {
-      const products: any = await executePrismaOperation(
-        'Product',
-        {
-          operation: PrismaOperationType.READ,
-          where: {
-            name: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-          include: {
-            images: {
-              where: { isPrimary: true },
-              take: 1,
-            },
-          },
+      // Log the stock change
+      await this.db.client.sizeVariantInventoryLog.create({
+        data: {
+          product_size_var_id: variant.product_size_var_id,
+          changeType: 'MANUAL_ADJUSTMENT',
+          quantityChanged: newStock - variant.stock,
+          stockBeforeChange: variant.stock,
+          stockAfterChange: newStock,
+          reservedStockBefore: variant.reservedStock,
+          reservedStockAfter: variant.reservedStock,
+          referenceType: 'MANUAL',
+          referenceId: `STOCK_UPDATE_${Date.now()}`,
+          remarks: 'Manual stock update',
         },
-        this.db,
-        this.logger,
-      );
+      });
 
-      return {
-        success: true,
-        data: products,
-        count: products.length,
-        message: `Found ${products.length} products matching "${searchTerm}"`,
-      };
-    } catch (error) {
-      console.error('Error searching products:', error);
-      throw new Error('Failed to search products');
+      // Update color total stock
+      await this.updateColorTotalStock(variant.product_color_id);
+
+      return { success: true, data: updatedVariant };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
     }
   }
+
+  async adjustStock(variantId: string, adjustmentData: any): Promise<any> {
+    try {
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
+      }
+
+      const newStock = variant.stock + adjustmentData.adjustment;
+      const updatedVariant = await this.db.client.productSizeVariant.update({
+        where: { product_size_var_id: variant.product_size_var_id },
+        data: {
+          stock: newStock,
+          availableStock: newStock - variant.reservedStock,
+          isLowStock: newStock <= variant.lowStockThreshold,
+        },
+      });
+
+      // Log the adjustment
+      await this.db.client.sizeVariantInventoryLog.create({
+        data: {
+          product_size_var_id: variant.product_size_var_id,
+          changeType: adjustmentData.adjustment > 0 ? 'INCREASE' : 'DECREASE',
+          quantityChanged: adjustmentData.adjustment,
+          stockBeforeChange: variant.stock,
+          stockAfterChange: newStock,
+          reservedStockBefore: variant.reservedStock,
+          reservedStockAfter: variant.reservedStock,
+          referenceType: 'ADJUSTMENT',
+          referenceId: `ADJ_${Date.now()}`,
+          remarks: adjustmentData.reason || 'Stock adjustment',
+        },
+      });
+
+      await this.updateColorTotalStock(variant.product_color_id);
+
+      return { success: true, data: updatedVariant };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async getInventoryLogs(variantId: string): Promise<any> {
+    try {
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
+      }
+      const logs = await this.db.client.sizeVariantInventoryLog.findMany({
+        where: { product_size_var_id: variant.product_size_var_id },
+        orderBy: { timestamp: 'desc' },
+        take: 50,
+      });
+      return { success: true, data: logs, count: logs.length };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async getStockAlerts(variantId: string): Promise<any> {
+    try {
+      const variant = await this.db.client.productSizeVariant.findUnique({
+        where: { id: variantId },
+      });
+      if (!variant) {
+        throw new InvalidInputError('Size variant not found');
+      }
+      const alerts = await this.db.client.stockAlert.findMany({
+        where: { product_size_var_id: variant.product_size_var_id, isResolved: false },
+        orderBy: { createdAt: 'desc' },
+      });
+      return { success: true, data: alerts, count: alerts.length };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  async resolveStockAlert(alertId: number): Promise<any> {
+    try {
+      const alert = await this.db.client.stockAlert.update({
+        where: { stock_alert_id: alertId },
+        data: { isResolved: true, resolvedAt: new Date() },
+      });
+      return { success: true, data: alert };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
+  // =================== WISHLIST MANAGEMENT ===================
 
   async addToWishlist(userId: any, productId: any) {
     try {
-      console.log('Add to wishlist service called with:', { userId, productId });
       const product = await this.db.client.product.findUnique({
-        where: {
-          id: productId,
-        },
+        where: { id: productId },
       });
       if (!product) {
-        throw new InvalidInputError('product not found');
+        throw new InvalidInputError('Product not found');
       }
+
       const user = await this.db.client.user.findUnique({
-        where: {
-          id: userId,
-        },
+        where: { id: userId },
       });
       if (!user) {
-        throw new InvalidInputError('user not found');
+        throw new InvalidInputError('User not found');
       }
+
       const existingItem = await this.db.client.wishlist.findFirst({
         where: {
           user_id: user.user_id,
@@ -863,17 +908,10 @@ export class ProductsService implements IService, IProductsService {
           user_id: user.user_id,
           product_id: product.product_id,
         },
-        include: {
-          product: true,
-        },
+        include: { product: true },
       });
 
-      return {
-        success: true,
-        data: wishlistItem,
-        count: wishlistItem.length,
-        message: `Found ${wishlistItem.length} products matching "${wishlistItem}"`,
-      };
+      return { success: true, data: wishlistItem };
     } catch (error) {
       throw error;
     }
@@ -881,7 +919,6 @@ export class ProductsService implements IService, IProductsService {
 
   async removeFromWishlist(wishlistId: any, userId: any) {
     try {
-      // Check if item exists and belongs to user
       const existingItem = await this.db.client.wishlist.findUnique({
         where: { uuid: wishlistId },
       });
@@ -890,7 +927,6 @@ export class ProductsService implements IService, IProductsService {
         throw new Error('Wishlist item not found');
       }
 
-      //here please send the userId on number
       if (existingItem.user_id !== parseInt(userId)) {
         throw new Error('Unauthorized access');
       }
@@ -915,6 +951,7 @@ export class ProductsService implements IService, IProductsService {
       throw error;
     }
   }
+
   async getWishlistByUserId(userId: any) {
     try {
       const wishlistItems = await this.db.client.wishlist.findMany({
@@ -922,10 +959,7 @@ export class ProductsService implements IService, IProductsService {
         include: {
           product: {
             include: {
-              images: {
-                where: { isPrimary: true },
-                take: 1,
-              },
+              images: { where: { isPrimary: true }, take: 1 },
             },
           },
         },
@@ -938,6 +972,44 @@ export class ProductsService implements IService, IProductsService {
       };
     } catch (error) {
       throw error;
+    }
+  }
+
+  // =================== HELPER METHODS ===================
+
+  private async updateColorTotalStock(colorId: number): Promise<void> {
+    const variants = await this.db.client.productSizeVariant.findMany({
+      where: { product_color_id: colorId },
+    });
+    const totalStock = variants.reduce((sum: any, v: any) => sum + v.stock, 0);
+    await this.db.client.productColor.update({
+      where: { product_color_id: colorId },
+      data: { totalStock },
+    });
+  }
+
+  private async cleanupLocalFile(filePath: string): Promise<void> {
+    try {
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        this.logger.info(`Local file cleaned up: ${filePath}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to cleanup local file: ${filePath}`);
+    }
+  }
+
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const urlParts = url.split('/');
+      const uploadIndex = urlParts.findIndex((part) => part === 'upload');
+      if (uploadIndex !== -1 && urlParts.length > uploadIndex + 2) {
+        const pathAfterUpload = urlParts.slice(uploadIndex + 2).join('/');
+        return pathAfterUpload.replace(/\.[^/.]+$/, '');
+      }
+      return null;
+    } catch (error) {
+      return null;
     }
   }
 }

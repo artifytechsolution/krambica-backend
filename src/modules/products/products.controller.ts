@@ -86,7 +86,7 @@ export class ProductsController {
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const result = await this.productsService.getAll();
-      res.json(ResponseUtil.success(result, 'Products list'));
+      res.json(ResponseUtil.success(result, 'Products list retrieved successfully'));
     } catch (error) {
       next(
         error instanceof AppError ? error : new InvalidInputError('Failed to retrieve products'),
@@ -112,7 +112,7 @@ export class ProductsController {
         throw new InvalidInputError('Product data is required');
       }
       const item = await this.productsService.create(req.body);
-      res.status(201).json(ResponseUtil.success(item, 'Product created'));
+      res.status(201).json(ResponseUtil.success(item, 'Product created successfully'));
     } catch (error) {
       next(error instanceof AppError ? error : new InvalidInputError('Failed to create product'));
     }
@@ -127,7 +127,7 @@ export class ProductsController {
         throw new InvalidInputError('Update data is required');
       }
       const item = await this.productsService.update(req.params.id, req.body);
-      res.json(ResponseUtil.success(item, 'Product updated'));
+      res.json(ResponseUtil.success(item, 'Product updated successfully'));
     } catch (error) {
       next(error instanceof AppError ? error : new InvalidInputError('Failed to update product'));
     }
@@ -135,73 +135,247 @@ export class ProductsController {
 
   async delete(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.params.id || isNaN(parseInt(req.params.id))) {
+      if (!req.params.id) {
         throw new InvalidInputError('Valid Product ID is required');
       }
-      await this.productsService.delete(parseInt(req.params.id));
-      res.json(ResponseUtil.success(null, 'Product deleted'));
+      await this.productsService.delete(req.params.id);
+      res.json(ResponseUtil.success(null, 'Product deleted successfully'));
     } catch (error) {
       next(error instanceof AppError ? error : new InvalidInputError('Failed to delete product'));
     }
   }
 
-  // =================== PRODUCT VARIANTS ===================
+  // =================== PRODUCT COLOR MANAGEMENT ===================
 
-  async productvariant(req: Request, res: Response, next: NextFunction) {
+  async getAllColors(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { productId } = req.params;
+      // if (!productId || isNaN(parseInt(productId))) {
+      //   throw new InvalidInputError('Valid Product ID is required');
+      // }
+      const result = await this.productsService.getAllColorsByProduct(productId);
+      res.json(ResponseUtil.success(result, 'Product colors retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve product colors'),
+      );
+    }
+  }
+
+  async createColor(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.body || Object.keys(req.body).length === 0) {
-        throw new InvalidInputError('Product variant data is required');
+        throw new InvalidInputError('Product color data is required');
       }
-      const item = await this.productsService.createproductvariant(req.body);
-      res.json(ResponseUtil.success(item, 'Product variant created successfully'));
+      const item = await this.productsService.createColor(req.body);
+      res.status(201).json(ResponseUtil.success(item, 'Product color created successfully'));
     } catch (error) {
       next(
-        error instanceof AppError
-          ? error
-          : new InvalidInputError('Failed to create product variant'),
+        error instanceof AppError ? error : new InvalidInputError('Failed to create product color'),
       );
     }
   }
 
-  async deleteproductvariant(req: Request, res: Response, next: NextFunction) {
+  async updateColor(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.params.id) {
-        throw new InvalidInputError('Product variant ID is required');
+      const { colorId } = req.params;
+
+      if (!req.body || Object.keys(req.body).length === 0) {
+        throw new InvalidInputError('Update data is required');
       }
-      const item = await this.productsService.deleteProductVariant(req.params.id);
-      res.json(ResponseUtil.success(item, 'Product variant deleted successfully'));
+      const item = await this.productsService.updateColor(colorId, req.body);
+      res.json(ResponseUtil.success(item, 'Product color updated successfully'));
     } catch (error) {
       next(
-        error instanceof AppError
-          ? error
-          : new InvalidInputError('Failed to delete product variant'),
+        error instanceof AppError ? error : new InvalidInputError('Failed to update product color'),
       );
     }
   }
 
-  // =================== IMAGE UPLOAD METHODS ===================
+  async deleteColor(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { colorId } = req.params;
+      if (!colorId) {
+        throw new InvalidInputError('Valid Color ID is required');
+      }
+      await this.productsService.deleteColor(colorId);
+      res.json(ResponseUtil.success(null, 'Product color deleted successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to delete product color'),
+      );
+    }
+  }
 
-  /**
-   * Upload single product image
-   */
+  // =================== PRODUCT COLOR IMAGES ===================
+
+  async getColorImages(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { colorId } = req.params;
+      const result = await this.productsService.getColorImages(colorId);
+      res.json(ResponseUtil.success(result, 'Color images retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve color images'),
+      );
+    }
+  }
+  async uploadMultipleColorImages(req: Request, res: Response, next: NextFunction) {
+    try {
+      console.log('Multiple color images upload request received----->');
+      console.log('Files:', req.files);
+      console.log('Body:', req.body);
+
+      if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+        throw new InvalidInputError('No image files provided');
+      }
+
+      const { product_color_id } = req.body;
+      if (!product_color_id) {
+        throw new InvalidInputError('Valid Product Color ID is required');
+      }
+
+      const uploadData = {
+        product_color_id: product_color_id,
+        files: req.files,
+      };
+
+      const result = await this.productsService.uploadMultipleColorImages(uploadData);
+
+      // Handle partial success scenarios
+      // 207 = Multi-Status (some succeeded, some failed)
+      // 201 = Created (all succeeded)
+      // 400 = Bad Request (all failed)
+      const status = result.success ? (result.errors?.length > 0 ? 207 : 201) : 400;
+
+      res.status(status).json(ResponseUtil.success(result, 'Color images upload completed'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to upload color images'),
+      );
+    }
+  }
+
+  async updateColorImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { imageId } = req.params;
+      if (!imageId || isNaN(parseInt(imageId))) {
+        throw new InvalidInputError('Valid Image ID is required');
+      }
+      if (!req.body || Object.keys(req.body).length === 0) {
+        throw new InvalidInputError('Update data is required');
+      }
+      const result = await this.productsService.updateColorImage(parseInt(imageId), req.body);
+      res.json(ResponseUtil.success(result, 'Color image updated successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to update color image'),
+      );
+    }
+  }
+
+  async deleteColorImage(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { imageId } = req.params;
+      if (!imageId || isNaN(parseInt(imageId))) {
+        throw new InvalidInputError('Valid Image ID is required');
+      }
+      await this.productsService.deleteColorImage(parseInt(imageId));
+      res.json(ResponseUtil.success(null, 'Color image deleted successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to delete color image'),
+      );
+    }
+  }
+
+  // =================== PRODUCT SIZE VARIANTS ===================
+
+  async getSizeVariants(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { colorId } = req.params;
+      if (!colorId) {
+        throw new InvalidInputError('Valid Color ID is required');
+      }
+      const result = await this.productsService.getSizeVariantsByColor(colorId);
+      res.json(ResponseUtil.success(result, 'Size variants retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve size variants'),
+      );
+    }
+  }
+
+  async createSizeVariant(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.body || Object.keys(req.body).length === 0) {
+        throw new InvalidInputError('Size variant data is required');
+      }
+      const item = await this.productsService.createSizeVariant(req.body);
+      res.status(201).json(ResponseUtil.success(item, 'Size variant created successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to create size variant'),
+      );
+    }
+  }
+
+  async updateSizeVariant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      // if (!variantId || isNaN(parseInt(variantId))) {
+      //   throw new InvalidInputError('Valid Variant ID is required');
+      // }
+      if (!req.body || Object.keys(req.body).length === 0) {
+        throw new InvalidInputError('Update data is required');
+      }
+      const item = await this.productsService.updateSizeVariant(variantId, req.body);
+      res.json(ResponseUtil.success(item, 'Size variant updated successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to update size variant'),
+      );
+    }
+  }
+
+  async deleteSizeVariant(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      await this.productsService.deleteSizeVariant(variantId);
+      res.json(ResponseUtil.success(null, 'Size variant deleted successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to delete size variant'),
+      );
+    }
+  }
+
+  // =================== PRODUCT IMAGES (General Product Level) ===================
+
   async uploadSingleImage(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.file) {
         throw new InvalidInputError('No image file provided');
       }
-
       const { product_id, altText, isPrimary } = req.body;
       if (!product_id) {
         throw new InvalidInputError('Valid Product ID is required');
       }
-
       const uploadData = {
         product_id: product_id,
         altText: altText || req.file.originalname,
         isPrimary: isPrimary === 'true' || isPrimary === true,
         file: req.file,
       };
-
       const result = await this.productsService.uploadSingleImage(uploadData);
       res.status(201).json(ResponseUtil.success(result, 'Image uploaded successfully'));
     } catch (error) {
@@ -209,28 +383,20 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Upload multiple product images
-   */
   async uploadMultipleImages(req: Request, res: Response, next: NextFunction) {
     try {
       if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
         throw new InvalidInputError('No image files provided');
       }
-
       const { product_id } = req.body;
       if (!product_id) {
         throw new InvalidInputError('Valid Product ID is required');
       }
-
       const uploadData = {
         product_id: product_id,
         files: req.files,
       };
-
       const result = await this.productsService.uploadMultipleImages(uploadData);
-
-      // Handle partial success scenarios
       const status = result.success ? (result.errors?.length > 0 ? 207 : 201) : 400;
       res.status(status).json(ResponseUtil.success(result, 'Images upload completed'));
     } catch (error) {
@@ -238,17 +404,13 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Get all images for a product
-   */
   async getProductImages(req: Request, res: Response, next: NextFunction) {
     try {
       const { productId } = req.params;
-      if (!productId || isNaN(parseInt(productId))) {
+      if (!productId) {
         throw new InvalidInputError('Valid Product ID is required');
       }
-
-      const result = await this.productsService.getProductImages(parseInt(productId));
+      const result = await this.productsService.getProductImages(productId);
       res.json(ResponseUtil.success(result, 'Product images retrieved successfully'));
     } catch (error) {
       next(
@@ -259,16 +421,12 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Delete a product image
-   */
   async deleteProductImage(req: Request, res: Response, next: NextFunction) {
     try {
       const { imageId } = req.params;
-      if (!imageId || isNaN(parseInt(imageId))) {
+      if (!imageId) {
         throw new InvalidInputError('Valid Image ID is required');
       }
-
       const result = await this.productsService.deleteProductImage(parseInt(imageId));
       res.json(ResponseUtil.success(result, 'Image deleted successfully'));
     } catch (error) {
@@ -276,16 +434,12 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Set primary image for a product
-   */
   async setPrimaryProductImage(req: Request, res: Response, next: NextFunction) {
     try {
       const { imageId } = req.params;
-      if (!imageId || isNaN(parseInt(imageId))) {
+      if (!imageId) {
         throw new InvalidInputError('Valid Image ID is required');
       }
-
       const result = await this.productsService.setPrimaryProductImage(parseInt(imageId));
       res.json(ResponseUtil.success(result, 'Primary image updated successfully'));
     } catch (error) {
@@ -295,26 +449,19 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Update product image details
-   */
   async updateProductImage(req: Request, res: Response, next: NextFunction) {
     try {
       const { imageId } = req.params;
       const { altText, isPrimary } = req.body;
-
       if (!imageId || isNaN(parseInt(imageId))) {
         throw new InvalidInputError('Valid Image ID is required');
       }
-
       const updateData: any = {};
       if (altText !== undefined && altText !== null) updateData.altText = altText;
       if (isPrimary !== undefined && isPrimary !== null) updateData.isPrimary = isPrimary;
-
       if (Object.keys(updateData).length === 0) {
         throw new InvalidInputError('No valid update data provided');
       }
-
       const result = await this.productsService.updateProductImage(parseInt(imageId), updateData);
       res.json(ResponseUtil.success(result, 'Image updated successfully'));
     } catch (error) {
@@ -322,17 +469,215 @@ export class ProductsController {
     }
   }
 
-  /**
-   * Handle multer errors specifically
-   */
+  // =================== STOCK AND INVENTORY MANAGEMENT ===================
+
+  async getStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      const result = await this.productsService.getStock(variantId);
+      res.json(ResponseUtil.success(result, 'Stock retrieved successfully'));
+    } catch (error) {
+      next(error instanceof AppError ? error : new InvalidInputError('Failed to retrieve stock'));
+    }
+  }
+
+  async updateStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      if (!req.body || typeof req.body.stock !== 'number') {
+        throw new InvalidInputError('Stock value is required and must be a number');
+      }
+      const result = await this.productsService.updateStock(variantId, req.body.stock);
+      res.json(ResponseUtil.success(result, 'Stock updated successfully'));
+    } catch (error) {
+      next(error instanceof AppError ? error : new InvalidInputError('Failed to update stock'));
+    }
+  }
+
+  async adjustStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      if (!req.body || typeof req.body.adjustment !== 'number' || !req.body.reason) {
+        throw new InvalidInputError('Adjustment value and reason are required');
+      }
+      const result = await this.productsService.adjustStock(variantId, req.body);
+      res.json(ResponseUtil.success(result, 'Stock adjusted successfully'));
+    } catch (error) {
+      next(error instanceof AppError ? error : new InvalidInputError('Failed to adjust stock'));
+    }
+  }
+
+  async getInventoryLogs(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      const result = await this.productsService.getInventoryLogs(variantId);
+      res.json(ResponseUtil.success(result, 'Inventory logs retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve inventory logs'),
+      );
+    }
+  }
+
+  async getStockAlerts(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { variantId } = req.params;
+      if (!variantId) {
+        throw new InvalidInputError('Valid Variant ID is required');
+      }
+      const result = await this.productsService.getStockAlerts(variantId);
+      res.json(ResponseUtil.success(result, 'Stock alerts retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve stock alerts'),
+      );
+    }
+  }
+
+  async resolveStockAlert(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { alertId } = req.params;
+      if (!alertId || isNaN(parseInt(alertId))) {
+        throw new InvalidInputError('Valid Alert ID is required');
+      }
+      const result = await this.productsService.resolveStockAlert(parseInt(alertId));
+      res.json(ResponseUtil.success(result, 'Stock alert resolved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('Failed to resolve stock alert'),
+      );
+    }
+  }
+
+  // =================== WISHLIST MANAGEMENT ===================
+
+  async addToWishlist(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { user_id, product_id } = req.body;
+      if (!user_id || !product_id) {
+        res.status(400).json({
+          success: false,
+          message: 'user_id and product_id are required',
+        });
+        return;
+      }
+      const result = await this.productsService.addToWishlist(user_id, product_id);
+      res.status(201).json({
+        success: true,
+        message: 'Item added to wishlist successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      next(
+        error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+      );
+    }
+  }
+
+  async clearWishlist(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { user_id } = req.body;
+      if (!user_id) {
+        res.status(400).json({
+          success: false,
+          message: 'user_id is required',
+        });
+        return;
+      }
+      await this.productsService.clearWishlist(user_id);
+      res.status(200).json({
+        success: true,
+        message: 'Wishlist cleared successfully',
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: error.message,
+      });
+    }
+  }
+
+  async removeFromWishlist(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { wishlist_id } = req.params;
+      const { user_id } = req.body;
+      if (!user_id) {
+        res.status(400).json({
+          success: false,
+          message: 'user_id is required',
+        });
+        return;
+      }
+      await this.productsService.removeFromWishlist(wishlist_id, user_id);
+      res.status(200).json({
+        success: true,
+        message: 'Item removed from wishlist successfully',
+      });
+    } catch (error: any) {
+      if (error.message === 'Wishlist item not found') {
+        res.status(404).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+      if (error.message === 'Unauthorized access') {
+        res.status(403).json({
+          success: false,
+          message: error.message,
+        });
+        return;
+      }
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: error.message,
+      });
+    }
+  }
+
+  async getWishlistByUserId(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { userId } = req.params;
+      if (!userId) {
+        throw new InvalidInputError('User ID is required');
+      }
+      const wishlistItems = await this.productsService.getWishlistByUserId(userId);
+      res.json(ResponseUtil.success(wishlistItems, 'Wishlist items retrieved successfully'));
+    } catch (error) {
+      next(
+        error instanceof AppError
+          ? error
+          : new InvalidInputError('Failed to retrieve wishlist items'),
+      );
+    }
+  }
+
+  // =================== HELPER: MULTER ERROR HANDLER ===================
+
   handleMulterError(error: any, req: Request, res: Response, next: NextFunction) {
     if (!error) {
       return next();
     }
-
     if (error instanceof multer.MulterError) {
       let errorMessage = 'File upload error';
-
       switch (error.code) {
         case 'LIMIT_FILE_SIZE':
           errorMessage = 'File too large. Maximum size is 5MB per file';
@@ -346,7 +691,6 @@ export class ProductsController {
         default:
           errorMessage = error.message || 'Unknown file upload error';
       }
-
       next(new InvalidInputError(errorMessage));
     } else if (
       error.message &&
@@ -355,134 +699,6 @@ export class ProductsController {
       next(new InvalidInputError(error.message));
     } else {
       next(new InvalidInputError(error.message || 'File upload failed'));
-    }
-  }
-  // Add item to wishlist
-  async addToWishlist(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { user_id, product_id } = req.body;
-      console.log('Add to wishlist request body:', req.body);
-
-      if (!user_id || !product_id) {
-        // REMOVE 'return' here
-        res.status(400).json({
-          success: false,
-          message: 'user_id and product_id are required',
-        });
-        return; // Keep this return (it returns void)
-      }
-
-      const result = await this.productsService.addToWishlist(user_id, product_id);
-
-      res.status(201).json({
-        success: true,
-        message: 'Item added to wishlist successfully',
-        data: result,
-      });
-    } catch (error: any) {
-      console.error('Add to wishlist error:', error);
-      if (error instanceof AppError) {
-        next(
-          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
-        );
-      }
-    }
-  }
-
-  async clearWishlist(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { user_id } = req.body;
-
-      if (!user_id) {
-        // REMOVE 'return' here
-        res.status(400).json({
-          success: false,
-          message: 'user_id is required',
-        });
-        return; // Keep this return (it returns void)
-      }
-
-      await this.productsService.clearWishlist(user_id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Wishlist cleared successfully',
-      });
-    } catch (error: any) {
-      console.error('Clear wishlist error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error.message,
-      });
-    }
-  }
-
-  // Remove item from wishlist
-  async removeFromWishlist(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { wishlist_id } = req.params;
-      const { user_id } = req.body;
-
-      if (!user_id) {
-        // REMOVE 'return' here
-        res.status(400).json({
-          success: false,
-          message: 'user_id is required',
-        });
-        return; // Keep this return (it returns void)
-      }
-
-      await this.productsService.removeFromWishlist(wishlist_id, user_id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Item removed from wishlist successfully',
-      });
-    } catch (error: any) {
-      console.error('Remove from wishlist error:', error);
-
-      if (error.message === 'Wishlist item not found') {
-        // REMOVE 'return' here
-        res.status(404).json({
-          success: false,
-          message: error.message,
-        });
-        return; // Keep this return (it returns void)
-      }
-
-      if (error.message === 'Unauthorized access') {
-        // REMOVE 'return' here
-        res.status(403).json({
-          success: false,
-          message: error.message,
-        });
-        return; // Keep this return (it returns void)
-      }
-
-      res.status(500).json({
-        success: false,
-        message: 'Internal server error',
-        error: error.message,
-      });
-    }
-  }
-  async getWishlistByUserId(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { userId } = req.params;
-
-      if (!userId) {
-        throw new InvalidInputError('User ID is required');
-      }
-
-      const wishlistItems = await this.productsService.getWishlistByUserId(userId);
-      res.json(ResponseUtil.success(wishlistItems, 'Wishlist items retrieved successfully'));
-    } catch (error) {
-      next(
-        error instanceof AppError
-          ? error
-          : new InvalidInputError('Failed to retrieve wishlist items'),
-      );
     }
   }
 }
