@@ -4,8 +4,11 @@ import path from 'path';
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    // Create uploads directory if it doesn't exist
-    const uploadDir = './uploads';
+    // Automatically create separate folders for images and videos
+    const baseDir = './uploads';
+    const isVideo = /mp4|mov|avi|mkv|webm/.test(path.extname(file.originalname).toLowerCase());
+    const uploadDir = isVideo ? `${baseDir}/videos` : `${baseDir}/images`;
+
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -22,7 +25,8 @@ const upload = multer({
   fileFilter: function (req, file, cb) {
     console.log(`Processing file: ${file.originalname}`);
 
-    const filetypes = /jpeg|jpg|png|webp/; // Added webp support
+    // ✅ Allow both images and videos
+    const filetypes = /jpeg|jpg|png|webp|mp4|mov|avi|mkv|webm/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = filetypes.test(file.mimetype);
 
@@ -32,13 +36,15 @@ const upload = multer({
     } else {
       console.log(`❌ File rejected: ${file.originalname} - Invalid format`);
       return cb(
-        new Error(`Only .png, .jpg, .jpeg and .webp formats allowed! Received: ${file.mimetype}`),
+        new Error(
+          `Only image (.png, .jpg, .jpeg, .webp) and video (.mp4, .mov, .avi, .mkv, .webm) formats are allowed! Received: ${file.mimetype}`,
+        ),
       );
     }
   },
   limits: {
-    fileSize: 1024 * 1024 * 5, // 5MB limit
-    files: 10, // Maximum 10 files
+    fileSize: 1024 * 1024 * 50, // Increased to 50MB for videos
+    files: 10, // Max 10 files
   },
 });
 

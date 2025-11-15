@@ -466,4 +466,85 @@ export class AuthService implements IService, IAuthService {
       throw new InvalidInputError(error.message || 'Failed to send OTP email');
     }
   }
+  async createAddress(data: any): Promise<any> {
+    try {
+      const {
+        user_id,
+        fullName,
+        phone,
+        addressLine1,
+        addressLine2,
+        city,
+        state,
+        zipCode,
+        country,
+        isDefault,
+        addressType,
+      } = data;
+
+      const userExist = await executePrismaOperation<'UserInput'>(
+        'user',
+        {
+          operation: PrismaOperationType.READ,
+          where: {
+            id: data.user_id,
+          },
+        },
+        this.db.client,
+        this.logger,
+      );
+      if (userExist.data.length <= 0) {
+        throw new InvalidInputError('user is not exist');
+      }
+      console.log(userExist.data[0].user_id);
+
+      const result = await this.db.client.address.create({
+        data: {
+          user_id: userExist.data[0].user_id,
+          fullName,
+          phone,
+          addressLine1,
+          addressLine2,
+          city,
+          state,
+          zipCode,
+          country,
+          isDefault: isDefault || false,
+          addressType,
+        },
+      });
+
+      return result;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+  async AddressList(data: any): Promise<any> {
+    try {
+      const userExist = await executePrismaOperation<'UserInput'>(
+        'user',
+        {
+          operation: PrismaOperationType.READ,
+          where: {
+            email: data.email,
+          },
+        },
+        this.db.client,
+        this.logger,
+      );
+      if (userExist.data.length <= 0) {
+        throw new InvalidInputError('user is not exist');
+      }
+
+      const result = await this.db.client.address.findMany({
+        where: {
+          user_id: userExist.data.user_id,
+        },
+      });
+
+      return result;
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
 }

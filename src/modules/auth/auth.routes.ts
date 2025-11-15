@@ -11,11 +11,13 @@ export const authRoutes = (controller: AuthController): Router => {
   router.delete('/:id', validateId, controller.delete.bind(controller));
   router.post('/', controller.create.bind(controller));
   router.post('/login', controller.Login.bind(controller));
+  router.post('/address', controller.createAddress.bind(controller));
   router.post(
     '/refreshToken',
     AuthMiddleware('refresh'),
     controller.GenerateRefreshToken.bind(controller),
   );
   router.post('/sendotp', controller.sendOtp.bind(controller));
+  router.post('/addressList', controller.AddressList.bind(controller));
   return router;
 };

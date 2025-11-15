@@ -7,7 +7,7 @@ export const productsRoutes = (controller: ProductsController): Router => {
   const router = Router();
 
   // =================== BASIC PRODUCT CRUD ===================
-  router.get('/', controller.getAll.bind(controller));
+  router.post('/productlist', controller.getAll.bind(controller));
   router.get('/:id', validateId, controller.getById.bind(controller));
   router.post('/', controller.create.bind(controller));
   router.patch('/:id', validateId, controller.update.bind(controller));
@@ -65,12 +65,8 @@ export const productsRoutes = (controller: ProductsController): Router => {
   // =================== WISHLIST MANAGEMENT ===================
   router.post('/wishlist/add', controller.addToWishlist.bind(controller));
   router.delete('/wishlist/clear', controller.clearWishlist.bind(controller));
-  router.delete(
-    '/wishlist/remove/:wishlist_id',
-    validateId,
-    controller.removeFromWishlist.bind(controller),
-  );
-  router.get('/wishlist/:userId', validateId, controller.getWishlistByUserId.bind(controller));
+  router.delete('/wishlist/remove/:wishlist_id', controller.removeFromWishlist.bind(controller));
+  router.get('/wishlist/:userId', controller.getWishlistByUserId.bind(controller));
 
   // // =================== LEGACY PRODUCT VARIANTS ===================
   //old way

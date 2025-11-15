@@ -10,6 +10,8 @@ import { IAuthService } from '../../interfaces/auth-service.interface';
 import { isUUID } from '../../utils/checkuuid';
 import cloudinary from '../../config/cloudinary.config';
 import fs from 'fs';
+import { take } from 'lodash';
+import { buildPrismaQuery, parseQueryParams } from '../../utils/prisma-query-builder';
 
 @injectable()
 export class ProductsService implements IService, IProductsService {
@@ -56,31 +58,152 @@ export class ProductsService implements IService, IProductsService {
 
   // =================== BASIC PRODUCT CRUD ===================
 
-  async getAll(): Promise<any> {
+  // async getAll(): Promise<any> {
+  //   try {
+  //     const products = await executePrismaOperation<any>(
+  //       'product',
+  //       {
+  //         operation: PrismaOperationType.READ,
+  //         where: {
+  //           deletedAt: null,
+  //         },
+  //         include: {
+  //           reviews: true,
+  //           category: true,
+  //           colors: {
+  //             include: {
+  //               images: { where: { isPrimary: true }, take: 1 },
+  //               sizeVariants: true,
+  //             },
+  //           },
+  //           images: { where: { isPrimary: true } },
+  //         },
+  //       },
+  //       this.db.client,
+  //       this.logger,
+  //     );
+  //     return products;
+  //   } catch (error: any) {
+  //     throw new InvalidInputError(error.message);
+  //   }
+  // }
+  async getAll(data?: any): Promise<any> {
     try {
-      const products = await executePrismaOperation<any>(
-        'product',
-        {
-          operation: PrismaOperationType.READ,
-          where: {
-            deletedAt: null,
-          },
+      const allowedFields = {
+        // ========== Direct Product Fields ==========
+        id: 'uuid',
+        product_id: 'int',
+        name: 'string',
+        slug: 'string',
+        description: 'string',
+        sku: 'string',
+        basePrice: 'float',
+        isVisible: 'boolean',
+        isFeatured: 'boolean',
+        category_id: 'int',
+        gender: 'enum',
+        material: 'string',
+        fabric: 'string',
+        careInstructions: 'string',
+        createdAt: 'datetime',
+        updatedAt: 'datetime',
+        deletedAt: 'datetime',
+
+        // ========== Category Relations ==========
+        'category.id': 'uuid',
+        'category.category_id': 'int',
+        'category.name': 'string',
+        'category.slug': 'string',
+        'category.description': 'string',
+      } as const;
+
+      // Handle both body and query params format
+      let filters = [];
+      let page = 1;
+      let limit = 10;
+      let globalSearch = '';
+
+      if (data) {
+        if (data.filters && Array.isArray(data.filters)) {
+          // Body format
+          filters = data.filters;
+          page = data.page || 1;
+          limit = data.limit || 10;
+          globalSearch = data.globalSearch || '';
+        } else {
+          // Query params format
+          const parsed = parseQueryParams(data);
+          filters = parsed.filters;
+          page = parsed.page;
+          limit = parsed.limit;
+          globalSearch = parsed.globalSearch || '';
+        }
+      }
+
+      const combineFieldsGroups = [
+        ['colors.name', 'name'],
+        ['category.name', 'name'],
+      ];
+
+      // Build dynamic filters
+      const { where, orderBy, skip, take } = buildPrismaQuery(
+        filters,
+        allowedFields,
+        page,
+        limit,
+        globalSearch,
+        combineFieldsGroups,
+      );
+
+      // Merge with existing deletedAt filter
+      const finalWhere = {
+        ...where,
+        deletedAt: null,
+      };
+
+      // Execute queries
+      const [products, totalCount] = await Promise.all([
+        this.db.client.product.findMany({
+          where: finalWhere,
+          orderBy: orderBy.length > 0 ? orderBy : undefined,
+          skip,
+          take,
           include: {
             reviews: true,
             category: true,
             colors: {
+              take: 1, // only fetch the first color
               include: {
-                images: { where: { isPrimary: true }, take: 1 },
+                images: {
+                  where: { isPrimary: true },
+                  take: 2, // fetch image + video if available
+                },
                 sizeVariants: true,
               },
             },
-            images: { where: { isPrimary: true } },
+            images: {
+              where: { isPrimary: true },
+            },
           },
+        }),
+        this.db.client.product.count({ where: finalWhere }),
+      ]);
+
+      // Return with pagination metadata
+      const totalPages = Math.ceil(totalCount / take);
+
+      return {
+        success: true,
+        data: products,
+        pagination: {
+          total: totalCount,
+          page,
+          limit: take,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
         },
-        this.db.client,
-        this.logger,
-      );
-      return products;
+      };
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
@@ -96,27 +219,23 @@ export class ProductsService implements IService, IProductsService {
       } else {
         throw new InvalidInputError('Invalid ID: must be a UUID string or numeric product_id');
       }
-
-      const product = await executePrismaOperation<any>(
-        'product',
-        {
-          operation: PrismaOperationType.READ_UNIQUE,
-          where,
-          include: {
-            reviews: true,
-            category: true,
-            images: true,
-            colors: {
-              include: {
-                images: true,
-                sizeVariants: true,
-              },
+      const product = await this.db.client.product.findUnique({
+        where,
+        include: {
+          reviews: true,
+          category: true,
+          colors: {
+            include: {
+              images: true,
+              sizeVariants: true,
             },
           },
+          images: {
+            where: { isPrimary: true },
+          },
         },
-        this.db.client,
-        this.logger,
-      );
+      });
+
       return product;
     } catch (error: any) {
       throw new InvalidInputError(error.message);
@@ -241,7 +360,7 @@ export class ProductsService implements IService, IProductsService {
       }
       const color = await this.db.client.productColor.create({
         data: {
-          product_id: product.data.product_id,
+          product_id: product.product_id,
           color_name: data.color_name,
           color_code: data.color_code,
           isAvailable: data.isAvailable ?? true,
@@ -318,6 +437,96 @@ export class ProductsService implements IService, IProductsService {
     }
   }
 
+  // async uploadMultipleColorImages(uploadData: {
+  //   product_color_id: string;
+  //   files: Express.Multer.File[];
+  // }): Promise<any> {
+  //   const { files, product_color_id } = uploadData;
+
+  //   console.log('Starting batch upload for color:', product_color_id);
+  //   console.log(`Total files to upload: ${files.length}`);
+
+  //   // Verify color exists first
+  //   const color = await this.db.client.productColor.findUnique({
+  //     where: { id: product_color_id },
+  //   });
+
+  //   console.log('Color found:', color);
+
+  //   if (!color) {
+  //     throw new InvalidInputError('Product color not found');
+  //   }
+
+  //   const results: any[] = [];
+  //   const errors: any[] = [];
+
+  //   // Process files sequentially to avoid overwhelming Cloudinary
+  //   for (let i = 0; i < files.length; i++) {
+  //     const file = files[i];
+  //     try {
+  //       console.log(`\n🔄 Processing file ${i + 1}/${files.length}: ${file.originalname}`);
+
+  //       // Upload to Cloudinary
+  //       const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+  //         folder: 'products/colors',
+  //         public_id: `color_${color.product_color_id}_${Date.now()}_${i}`,
+  //         transformation: [
+  //           { width: 1000, height: 1000, crop: 'limit' },
+  //           { quality: 'auto' },
+  //           { format: 'auto' },
+  //         ],
+  //         resource_type: 'auto',
+  //       });
+
+  //       console.log(`☁️ Cloudinary upload successful for file ${i + 1}`);
+  //       console.log(`   URL: ${cloudinaryResult.secure_url}`);
+
+  //       // Save to database
+  //       const colorImage = await this.db.client.productColorImage.create({
+  //         data: {
+  //           product_color_id: color.product_color_id,
+  //           url: cloudinaryResult.secure_url,
+  //           altText: file.originalname,
+  //           isPrimary: i === 0, // First image is primary
+  //           displayOrder: i,
+  //         },
+  //       });
+
+  //       // Clean up local file
+  //       await this.cleanupLocalFile(file.path);
+
+  //       results.push(colorImage);
+  //       console.log(`✅ File ${i + 1}/${files.length} completed successfully`);
+  //     } catch (error) {
+  //       console.error(`❌ File ${i + 1}/${files.length} failed: ${file.originalname}`, error);
+
+  //       // Clean up local file even on error
+  //       await this.cleanupLocalFile(file.path);
+
+  //       errors.push({
+  //         filename: file.originalname,
+  //         error: error instanceof Error ? error.message : 'Unknown error',
+  //       });
+  //     }
+  //   }
+
+  //   console.log(`\n📊 Batch upload summary:`);
+  //   console.log(`   Total files: ${files.length}`);
+  //   console.log(`   Successful: ${results.length}`);
+  //   console.log(`   Failed: ${errors.length}`);
+
+  //   return {
+  //     success: results.length > 0,
+  //     data: results,
+  //     errors: errors,
+  //     summary: {
+  //       total: files.length,
+  //       uploaded: results.length,
+  //       failed: errors.length,
+  //     },
+  //   };
+  // }
+
   async uploadMultipleColorImages(uploadData: {
     product_color_id: string;
     files: Express.Multer.File[];
@@ -347,15 +556,20 @@ export class ProductsService implements IService, IProductsService {
       try {
         console.log(`\n🔄 Processing file ${i + 1}/${files.length}: ${file.originalname}`);
 
+        // Detect if file is video
+        const isVideo = file.mimetype.startsWith('video/');
+
         // Upload to Cloudinary
         const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
           folder: 'products/colors',
           public_id: `color_${color.product_color_id}_${Date.now()}_${i}`,
-          transformation: [
-            { width: 1000, height: 1000, crop: 'limit' },
-            { quality: 'auto' },
-            { format: 'auto' },
-          ],
+          transformation: isVideo
+            ? [{ width: 1280, height: 720, crop: 'limit' }, { quality: 'auto' }]
+            : [
+                { width: 1000, height: 1000, crop: 'limit' },
+                { quality: 'auto' },
+                { format: 'auto' },
+              ],
           resource_type: 'auto',
         });
 
@@ -368,6 +582,7 @@ export class ProductsService implements IService, IProductsService {
             product_color_id: color.product_color_id,
             url: cloudinaryResult.secure_url,
             altText: file.originalname,
+            type: isVideo ? 'video' : 'image',
             isPrimary: i === 0, // First image is primary
             displayOrder: i,
           },
@@ -927,7 +1142,16 @@ export class ProductsService implements IService, IProductsService {
         throw new Error('Wishlist item not found');
       }
 
-      if (existingItem.user_id !== parseInt(userId)) {
+      const user = await this.db.client.user.findUnique({
+        where: {
+          id: userId,
+        },
+      });
+      if (!user) {
+        throw new Error('user is not found');
+      }
+
+      if (existingItem.user_id !== user.user_id) {
         throw new Error('Unauthorized access');
       }
 
@@ -954,12 +1178,34 @@ export class ProductsService implements IService, IProductsService {
 
   async getWishlistByUserId(userId: any) {
     try {
+      const user = await this.db.client.user.findUnique({
+        where: {
+          id: userId,
+        },
+      });
+      if (!user) {
+        throw new InvalidInputError('user not found');
+      }
       const wishlistItems = await this.db.client.wishlist.findMany({
-        where: { user_id: parseInt(userId) },
+        where: { user_id: user.user_id },
         include: {
           product: {
             include: {
-              images: { where: { isPrimary: true }, take: 1 },
+              reviews: true,
+              category: true,
+              colors: {
+                take: 1, // only fetch the first color
+                include: {
+                  images: {
+                    where: { isPrimary: true },
+                    take: 2, // fetch image + video if available
+                  },
+                  sizeVariants: true,
+                },
+              },
+              images: {
+                where: { isPrimary: true },
+              },
             },
           },
         },

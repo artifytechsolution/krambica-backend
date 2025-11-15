@@ -121,18 +121,38 @@ export interface DiscountCalculation {
   details: any;
 }
 
+// export interface FreeProductOption {
+//   promotion_free_prod_id: number;
+//   product_id?: number;
+//   size_variant_id?: number;
+//   productName: string;
+//   colorName?: string;
+//   size?: string;
+//   price: number;
+//   stock: number;
+//   maxSelectableQuantity: number;
+//   images: string[];
+//   displayOrder: number;
+// }
 export interface FreeProductOption {
   promotion_free_prod_id: number;
-  product_id?: number;
-  size_variant_id?: number;
+  product_id: number;
   productName: string;
-  colorName?: string;
-  size?: string;
-  price: number;
-  stock: number;
-  maxSelectableQuantity: number;
-  images: string[];
+  basePrice: number;
+  maxSelectableQuantity: number; // Max of THIS specific product
+  totalFreeItemsEarned: number; // Total free items user can select
   displayOrder: number;
+  availableVariants: Array<{
+    product_size_var_id: number;
+    size: string;
+    price: number;
+    stock: number;
+    colorName: string;
+    colorCode: string;
+    colorId: number;
+    images: string[];
+  }>;
+  primaryImage: string;
 }
 
 export interface UserPromotionHistoryItem {

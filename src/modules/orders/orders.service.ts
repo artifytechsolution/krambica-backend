@@ -22,6 +22,8 @@ import { buildPrismaQuery, parseQueryParams } from '../../utils/prisma-query-bui
 import { stockNamespace } from '../../main';
 import { ICouponService } from '../../interfaces/ICouponService.interface';
 import { InvalidInputError } from '../../utils/error.utils';
+import Razorpay from 'razorpay';
+import { IPromotionsService } from '../../interfaces/promotions-service.interface';
 
 @injectable()
 export class OrdersService implements IService, IOrdersService {
@@ -32,6 +34,7 @@ export class OrdersService implements IService, IOrdersService {
     'AuthService',
     'ProductsService',
     'CuponService',
+    'PromotionService',
   ];
   static optionalDependencies: string[] = [];
 
@@ -41,6 +44,8 @@ export class OrdersService implements IService, IOrdersService {
   private auth: IAuthService;
   private product: IProductsService;
   private Cupon: ICouponService;
+  private promotion: IPromotionsService;
+  private razorpay: any;
 
   constructor(
     logger: ILoggerService,
@@ -49,6 +54,7 @@ export class OrdersService implements IService, IOrdersService {
     auth: IAuthService,
     product: IProductsService,
     CuponService: ICouponService,
+    PromotionService: IPromotionsService,
   ) {
     this.logger = logger;
     this.db = db;
@@ -56,6 +62,11 @@ export class OrdersService implements IService, IOrdersService {
     this.auth = auth;
     this.product = product;
     this.Cupon = CuponService;
+    this.promotion = PromotionService;
+    this.razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
 
     console.log('✅ OrdersService instantiated');
   }
@@ -109,27 +120,118 @@ export class OrdersService implements IService, IOrdersService {
   };
 
   // Helpers
-  private calculateOrderTotals(totalAmount: number, discount: number = 0) {
-    const discountedAmount = totalAmount - discount;
-    const tax = discountedAmount * this.CONFIG.TAX_RATE;
-    const shippingCost =
-      discountedAmount >= this.CONFIG.FREE_SHIPPING_THRESHOLD ? 0 : this.CONFIG.SHIPPING_COST;
-    const grandTotal = discountedAmount + tax + shippingCost;
+  // private calculateOrderTotals(totalAmount: number, discount: number = 0) {
+  //   const discountedAmount = totalAmount - discount;
+  //   const tax = discountedAmount * this.CONFIG.TAX_RATE;
+  //   const shippingCost =
+  //     discountedAmount >= this.CONFIG.FREE_SHIPPING_THRESHOLD ? 0 : this.CONFIG.SHIPPING_COST;
+  //   const grandTotal = discountedAmount + tax + shippingCost;
 
-    console.log('💰 Calculated order totals', {
-      totalAmount: discountedAmount,
+  //   console.log('💰 Calculated order totals', {
+  //     totalAmount: discountedAmount,
+  //     discount,
+  //     tax,
+  //     shippingCost,
+  //     grandTotal,
+  //   });
+
+  //   return {
+  //     totalAmount: parseFloat(discountedAmount.toFixed(2)),
+  //     tax: parseFloat(tax.toFixed(2)),
+  //     shippingCost,
+  //     grandTotal: parseFloat(grandTotal.toFixed(2)),
+  //   };
+  // }
+  //LATEST
+  private calculateOrderTotals(
+    totalAmount: number,
+    discount: number,
+  ): {
+    totalAmount: number;
+    discount: number;
+    tax: number;
+    shippingCost: number;
+    grandTotal: number;
+  } {
+    const subtotal = totalAmount - discount;
+    const tax = Math.round(subtotal * 0.05); // 5% tax
+    const shippingCost = subtotal > 1000 ? 0 : 50; // Free shipping above ₹1000
+    const grandTotal = subtotal + tax + shippingCost;
+
+    return {
+      totalAmount,
       discount,
       tax,
       shippingCost,
-      grandTotal,
+      grandTotal: Math.round(grandTotal),
+    };
+  }
+
+  private async validateSelectedFreeProducts(
+    promotionId: string,
+    selectedFreeItems: any[],
+    freeItemsEarned: number,
+  ): Promise<void> {
+    console.log('🔍 Validating selected free products...');
+
+    if (!selectedFreeItems || selectedFreeItems.length === 0) {
+      throw new InvalidInputError('No free products selected');
+    }
+
+    const selectedQuantity = selectedFreeItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    console.log('Selected free items:', {
+      count: selectedFreeItems.length,
+      totalQuantity: selectedQuantity,
+      earned: freeItemsEarned,
+      promotionId: promotionId,
+    });
+    console.log('Selected free items:');
+    console.log(selectedFreeItems);
+
+    if (selectedQuantity > freeItemsEarned) {
+      throw new InvalidInputError(
+        `You can only select ${freeItemsEarned} free item(s), but selected ${selectedQuantity}`,
+      );
+    }
+
+    // Validate each free product
+    const promotion = await this.db.client.Promotion.findUnique({
+      where: { promotion_id: promotionId },
+      include: { freeProducts: true },
     });
 
-    return {
-      totalAmount: parseFloat(discountedAmount.toFixed(2)),
-      tax: parseFloat(tax.toFixed(2)),
-      shippingCost,
-      grandTotal: parseFloat(grandTotal.toFixed(2)),
-    };
+    if (!promotion) {
+      throw new InvalidInputError('Promotion not found');
+    }
+
+    for (const freeItem of selectedFreeItems) {
+      const isValid = promotion.freeProducts.some(
+        (fp: any) =>
+          fp.product_id === freeItem.product_id || fp.size_variant_id === freeItem.size_variant_id,
+      );
+
+      if (!isValid) {
+        throw new InvalidInputError(
+          `Product ${freeItem.product_id} is not eligible as a free product`,
+        );
+      }
+
+      // Check stock
+      const variant = await this.db.client.ProductSizeVariant.findUnique({
+        where: { product_size_var_id: freeItem.size_variant_id },
+      });
+
+      if (!variant || variant.stock < freeItem.quantity) {
+        throw new InvalidInputError(
+          `Free product out of stock (Available: ${variant?.stock || 0})`,
+        );
+      }
+
+      console.log(
+        `  ✅ Valid free item: Product ${freeItem.product_id}, Qty: ${freeItem.quantity}`,
+      );
+    }
   }
 
   private async reserveStock(
@@ -381,25 +483,85 @@ export class OrdersService implements IService, IOrdersService {
     console.log('✅ Order items validated');
   }
 
-  private async calculateItemsTotalAmount(items: any[]): Promise<number> {
-    console.log('💰 Calculating items total amount', { itemsCount: items.length });
+  // private async calculateItemsTotalAmount(items: any[]): Promise<number> {
+  //   console.log('💰 Calculating items total amount', { itemsCount: items.length });
 
+  //   let totalAmount = 0;
+
+  //   for (const item of items) {
+  //     const variantExist = await this.product.getProductVariantById(item.variant_id);
+  //     console.log('product variant is exist------->');
+  //     console.log(variantExist);
+
+  //     if (variantExist?.length <= 0) {
+  //       console.error(`❌ Variant not found`, { variantId: item.variant_id });
+  //       throw new Error(`Variant ${item.variant_id} not found`);
+  //     }
+
+  //     totalAmount += variantExist[0].price * item.quantity;
+  //   }
+
+  //   console.log('✅ Total amount calculated', { totalAmount });
+  //   return totalAmount;
+  // }
+  //LATEST
+  private async calculateItemsTotalAmount(items: any[]): Promise<number> {
+    console.log('💰 Calculating items total amount...');
+
+    if (!items || items.length === 0) {
+      throw new InvalidInputError('Cart is empty');
+    }
+    console.log('items ------->');
+    console.log(items);
+
+    // OPTIMIZATION: Fetch all variants in single query
+    const variantIds = items.map((item) => item.variant_id);
+    const variants = await this.db.client.ProductSizeVariant.findMany({
+      where: { id: { in: variantIds } },
+      include: {
+        productColor: {
+          include: { product: true },
+        },
+      },
+    });
+
+    const variantMap = new Map(variants.map((v: any) => [v.id, v]));
     let totalAmount = 0;
 
     for (const item of items) {
-      const variantExist = await this.product.getProductVariantById(item.variant_id);
-      console.log('product variant is exist------->');
-      console.log(variantExist);
+      const variant: any = variantMap.get(item.variant_id);
 
-      if (variantExist?.length <= 0) {
-        console.error(`❌ Variant not found`, { variantId: item.variant_id });
-        throw new Error(`Variant ${item.variant_id} not found`);
+      if (!variant) {
+        throw new InvalidInputError(`Product variant ${item.variant_id} not found`);
       }
 
-      totalAmount += variantExist[0].price * item.quantity;
+      // Check product availability
+      if (!variant.productColor?.product?.isVisible) {
+        throw new InvalidInputError(
+          `Product "${variant.productColor?.product?.name}" is no longer available`,
+        );
+      }
+
+      // Check variant availability
+      if (!variant.isAvailable) {
+        throw new InvalidInputError(`Size "${variant.size}" is no longer available`);
+      }
+
+      // Check stock
+      if (variant.stock < item.quantity) {
+        throw new InvalidInputError(
+          `Insufficient stock for "${variant.productColor?.product?.name}" - Size: ${variant.size}. Available: ${variant.stock}, Requested: ${item.quantity}`,
+        );
+      }
+
+      totalAmount += variant.price * item.quantity;
+
+      console.log(
+        `  ✅ ${variant.productColor?.product?.name} (${variant.size}): ${item.quantity} × ₹${variant.price} = ₹${variant.price * item.quantity}`,
+      );
     }
 
-    console.log('✅ Total amount calculated', { totalAmount });
+    console.log('✅ Total amount:', `₹${totalAmount}`);
     return totalAmount;
   }
 
@@ -408,9 +570,8 @@ export class OrdersService implements IService, IOrdersService {
 
     const itemPromises = items.map(async (item: any) => {
       const productExist: any = await this.product.getById(item.product_id);
-      console.log('product is commingggg----->');
-      console.log(productExist);
-      if (!productExist?.data) {
+
+      if (!productExist) {
         console.error(`❌ Product not found`, { productId: item.product_id });
         throw new Error(`Product ${item.product_id} not found`);
       }
@@ -774,181 +935,660 @@ export class OrdersService implements IService, IOrdersService {
   //   }
   //create updated
 
-  async create(data: any): Promise<Order> {
+  //latest 2
+  // async create(data: any): Promise<Order> {
+  //   try {
+  //     console.log('🟢 Creating new order', {
+  //       userId: data.user_id,
+  //       itemsCount: data.items.length,
+  //       discount: data.discount || 0,
+  //       couponCode: data.couponCode || 'None',
+  //     });
+
+  //     // Validate user and address
+  //     const user = await this.validateUser(data.user_id);
+  //     const address = await this.validateAddress(data.address_id, data.user_id);
+  //     this.validateOrderItems(data.items);
+  //     const couponService = this.Cupon; // Assume injected CouponService
+  //     console.log('----->cupon service is comming------>');
+
+  //     // Reserve stock for items
+  //     await this.reserveStock(data.items);
+
+  //     // Calculate total amount (orderValue)
+  //     const totalAmount = await this.calculateItemsTotalAmount(data.items);
+  //     console.log(`🟡 Calculated totalAmount (orderValue): ${totalAmount}`);
+
+  //     if (typeof totalAmount !== 'number' || totalAmount < 0) {
+  //       throw new Error('Invalid order value');
+  //     }
+
+  //     let discount = data.discount || 0;
+  //     let couponRedemption = null;
+
+  //     // Handle coupon if provided
+  //     if (data.couponCode) {
+  //       console.log(`🟡 Validating coupon: ${data.couponCode}`);
+
+  //       const user = await this.db.client.user.findUnique({
+  //         where: { user_id: data.user_id },
+  //       });
+  //       if (!user) {
+  //         throw new InvalidInputError('user is not found');
+  //       }
+
+  //       const validationResult = await couponService.validate({
+  //         code: data.couponCode,
+  //         orderValue: totalAmount,
+  //         userId: user.id,
+  //       });
+  //       console.log('🟢 Coupon validation result:', validationResult);
+
+  //       discount = validationResult.discountAmount;
+  //       console.log(`🟢 Coupon discount applied: ${discount}`);
+  //     }
+
+  //     // Calculate order totals with verified discount
+  //     const totals = this.calculateOrderTotals(totalAmount, discount);
+  //     console.log(`🟡 Order totals:`, totals);
+
+  //     const { items, couponCode, appliedPromotion, ...orderData } = data; // get appliedPromotion here
+
+  //     const razorpayOrderOptions = {
+  //       amount: Math.round(totals.grandTotal * 100), // amount in paise (smallest currency unit)
+  //       currency: 'INR',
+  //       receipt: `order_rcpt_${Date.now()}`,
+  //     };
+
+  //     const razorpayOrder = await this.razorpay.orders.create(razorpayOrderOptions);
+  //     console.log('🟢 Razorpay order created:', razorpayOrder.id);
+
+  //     // Create order
+  //     const createOrder = await executePrismaOperation(
+  //       'Order',
+  //       {
+  //         operation: PrismaOperationType.CREATE,
+  //         data: {
+  //           ...orderData,
+  //           user_id: user.user_id,
+  //           totalAmount: totals.totalAmount,
+  //           discount,
+  //           tax: totals.tax,
+  //           shippingCost: totals.shippingCost,
+  //           grandTotal: totals.grandTotal,
+  //           status: OrderStatus.PENDING,
+  //           paymentStatus: PaymentStatus.UNPAID,
+  //           placedAt: new Date(),
+  //         },
+  //       },
+  //       this.db.client,
+  //       this.logger,
+  //     );
+
+  //     console.log('create order is herere----->');
+  //     console.log(createOrder);
+
+  //     // Create order items
+  //     await this.createOrderItems(createOrder.data.id, createOrder.data.order_id, items);
+
+  //     // ===== Add Promotion Redemption Handling Here =====
+
+  //     let promotionRedemption = null;
+
+  //     if (appliedPromotion && appliedPromotion.promotion_id) {
+  //       // Create promotion redemption record
+  //       promotionRedemption = await this.db.client.promotionRedemption.create({
+  //         data: {
+  //           promotion_id: appliedPromotion.promotion_id,
+  //           order_id: createOrder.data.order_id,
+  //           user_id: user.user_id,
+  //           purchasedQuantity: items.reduce((sum: number, item: any) => sum + item.quantity, 0),
+  //           freeQuantity:
+  //             appliedPromotion.selectedFreeItems?.reduce(
+  //               (sum: number, item: any) => sum + item.quantity,
+  //               0,
+  //             ) || 0,
+  //           appliedAt: new Date(),
+  //         },
+  //       });
+
+  //       // Create free item records and adjust stock
+  //       for (const freeItem of appliedPromotion.selectedFreeItems || []) {
+  //         await this.db.client.promotionFreeItem.create({
+  //           data: {
+  //             redemption_id: promotionRedemption.promotion_redemption_id,
+  //             product_id: freeItem.product_id,
+  //             size_variant_id: freeItem.size_variant_id,
+  //             quantity: freeItem.quantity,
+  //           },
+  //         });
+
+  //         // Deduct stock for free item
+  //         await this.db.client.productSizeVariant.update({
+  //           where: { product_size_var_id: freeItem.size_variant_id },
+  //           data: {
+  //             stock: { decrement: freeItem.quantity },
+  //             availableStock: { decrement: freeItem.quantity },
+  //           },
+  //         });
+
+  //         // Optionally, create inventory log for transparency
+  //         if (this.db.client.sizeVariantInventoryLog) {
+  //           await this.db.client.sizeVariantInventoryLog.create({
+  //             data: {
+  //               product_size_var_id: freeItem.size_variant_id,
+  //               changeType: 'SALE',
+  //               quantityChanged: freeItem.quantity,
+  //               stockBeforeChange: 0, // should be real stock before change if tracked
+  //               stockAfterChange: 0, // should be real stock after change if tracked
+  //               referenceType: 'MANUAL',
+  //               referenceId: promotionRedemption.promotion_redemption_id.toString(),
+  //               changed_by: user.user_id,
+  //               remarks: `Free promotional item from promotion_id: ${appliedPromotion.promotion_id}`,
+  //             },
+  //           });
+  //         }
+  //       }
+  //     }
+
+  //     // Redeem coupon if present (existing logic)
+  //     if (data.couponCode) {
+  //       const user = await this.db.client.user.findUnique({
+  //         where: { user_id: data.user_id },
+  //       });
+  //       if (!user) {
+  //         throw new InvalidInputError('user is not found');
+  //       }
+  //       console.log(`🟡 Redeeming coupon: ${data.couponCode}`);
+  //       couponRedemption = await couponService.redeem({
+  //         code: data.couponCode,
+  //         orderValue: totalAmount,
+  //         userId: user.id,
+  //         orderId: createOrder.data.order_id,
+  //       });
+  //       console.log('🟢 Coupon redemption result:', couponRedemption);
+  //     }
+
+  //     // Fetch complete order
+  //     const completeOrder = await this.getById(createOrder.data.order_id);
+
+  //     console.log(
+  //       `✅ Order #${createOrder.data.order_id} created successfully with reserved stock`,
+  //       { couponApplied: !!data.couponCode, discount, promotionRedemption },
+  //     );
+
+  //     return {
+  //       ...completeOrder,
+  //       razorpay_order_id: razorpayOrder.id,
+  //       razorpay_amount: razorpayOrder.amount,
+  //       razorpay_currency: razorpayOrder.currency,
+  //       razorpay_receipt: razorpayOrder.receipt,
+  //     } as any;
+  //   } catch (error: any) {
+  //     console.error('❌ Error creating order', { error: error.message });
+  //     throw new Error(error.message);
+  //   }
+  // }
+  async create(data: any): Promise<any> {
+    console.log('🟢 ===== STARTING ORDER CREATION =====');
+    console.log('Order data:', {
+      userId: data.user_id,
+      itemsCount: data.items?.length || 0,
+      hasPromotion: !!data.appliedPromotion,
+      hasCoupon: !!data.couponCode,
+      promotionType: data.appliedPromotion?.type || 'None',
+    });
+
     try {
-      console.log('🟢 Creating new order', {
-        userId: data.user_id,
-        itemsCount: data.items.length,
-        discount: data.discount || 0,
-        couponCode: data.couponCode || 'None',
+      const { items, couponCode, appliedPromotion, ...orderData } = data;
+
+      // =====================================================
+      // STEP 1: VALIDATE BASIC DATA
+      // =====================================================
+      console.log('\n📋 STEP 1: Validating basic order data...');
+
+      if (!items || items.length === 0) {
+        throw new InvalidInputError('Cart is empty');
+      }
+
+      const user = await this.validateUser(data.user_id);
+      console.log('✅ User validated:', user.user_id);
+
+      const address = await this.validateAddress(data.address_id, data.user_id);
+      console.log('✅ Address validated:', address.address_id);
+
+      this.validateOrderItems(items);
+      console.log('✅ Order items validated:', items.length);
+
+      // =====================================================
+      // ✅ FIX 1: FETCH ACTUAL PRICES BEFORE VALIDATION
+      // =====================================================
+      console.log('\n💰 Fetching actual prices...');
+
+      const variantIds = items.map((item: any) => item.variant_id);
+      const variants = await this.db.client.ProductSizeVariant.findMany({
+        where: { id: { in: variantIds } },
+        include: {
+          productColor: {
+            include: { product: true },
+          },
+        },
       });
 
-      // Validate user and address
-      const user = await this.validateUser(data.user_id);
-      const address = await this.validateAddress(data.address_id, data.user_id);
-      this.validateOrderItems(data.items);
-      const couponService = this.Cupon; // Assume injected CouponService
-      console.log('----->cupon service is comming------>');
+      const variantMap = new Map(variants.map((v: any) => [v.id, v]));
+      console.log(`✅ Fetched ${variants.length} variant prices`);
 
-      // Reserve stock for items
-      await this.reserveStock(data.items);
+      // =====================================================
+      // STEP 2: VALIDATE PROMOTION (ALL TYPES)
+      // =====================================================
+      console.log('\n🎁 STEP 2: Validating promotion...');
 
-      // Calculate total amount (orderValue)
-      const totalAmount = await this.calculateItemsTotalAmount(data.items);
-      console.log(`🟡 Calculated totalAmount (orderValue): ${totalAmount}`);
+      let promotionValidation: any = null;
+      let promotionDiscount = 0;
 
-      if (typeof totalAmount !== 'number' || totalAmount < 0) {
-        throw new Error('Invalid order value');
-      }
+      if (appliedPromotion?.promotion_id) {
+        console.log('🔍 Promotion ID:', appliedPromotion.promotion_id);
+        console.log('🔍 Promotion Type:', appliedPromotion.type);
 
-      let discount = data.discount || 0;
-      let couponRedemption = null;
+        try {
+          // ✅ FIX 2: Map items with ACTUAL PRICES (not 0)
+          const promotionItems = items.map((item: any) => {
+            const variant: any = variantMap.get(item.variant_id);
+            return {
+              product_id: item.product_id,
+              product_size_var_id: item.variant_id,
+              quantity: item.quantity,
+              price: variant?.price || 0, // ✅ FIXED: Real price from DB
+            };
+          });
 
-      // Handle coupon if provided
-      if (data.couponCode) {
-        console.log(`🟡 Validating coupon: ${data.couponCode}`);
+          console.log('🛒 Cart items for validation:', promotionItems);
 
-        const user = await this.db.client.user.findUnique({
-          where: { user_id: data.user_id },
-        });
-        if (!user) {
-          throw new InvalidInputError('user is not found');
+          // ✅ FIX 3: Use 'userid' (lowercase) not 'user_id'
+          const validationResults = await this.promotion.validateCart({
+            items: promotionItems,
+            user_id: data.user_id, // ✅ FIXED: lowercase 'userid'
+          });
+
+          console.log('📊 Validation results:', validationResults);
+
+          // ✅ FIX 4: Use 'promotionid' not 'promotion_id'
+          promotionValidation = validationResults.find(
+            (v: any) => v.promotion_id === appliedPromotion.promotion_id, // ✅ FIXED
+          );
+
+          console.log('🔍 Matched promotion:', promotionValidation);
+
+          if (!promotionValidation || !promotionValidation.isEligible) {
+            throw new InvalidInputError('Promotion is not applicable to this cart');
+          }
+
+          console.log('✅ Promotion validation passed!', {
+            type: promotionValidation.type,
+            isEligible: promotionValidation.isEligible,
+            freeItems: promotionValidation.freeItemsEarned || 0,
+          });
+
+          // Calculate discount
+          const discountCalculation = await this.promotion.calculateDiscount(
+            appliedPromotion.promotion_id,
+            promotionItems,
+          );
+
+          promotionDiscount = discountCalculation.discountAmount || 0;
+
+          console.log('💰 Promotion discount calculated:', {
+            discountAmount: promotionDiscount,
+            type: promotionValidation.type,
+          });
+
+          // For BUY_X_GET_Y_FREE: Validate selected free products
+          if (promotionValidation.type === 'BUY_X_GET_Y_FREE') {
+            if (
+              !appliedPromotion.selectedFreeItems ||
+              appliedPromotion.selectedFreeItems.length === 0
+            ) {
+              throw new InvalidInputError(
+                `Please select ${promotionValidation.freeItemsEarned} free item(s)`,
+              );
+            }
+
+            console.log('🎁 Validating selected free products...');
+            await this.validateSelectedFreeProducts(
+              appliedPromotion.promotion_id,
+              appliedPromotion.selectedFreeItems,
+              promotionValidation.freeItemsEarned,
+            );
+            console.log('✅ Free products validated');
+          }
+        } catch (error: any) {
+          console.error('❌ Promotion validation failed:', error.message);
+          throw new InvalidInputError(`Promotion error: ${error.message}`);
         }
-
-        const validationResult = await couponService.validate({
-          code: data.couponCode,
-          orderValue: totalAmount,
-          userId: user.id,
-        });
-        console.log('🟢 Coupon validation result:', validationResult);
-
-        discount = validationResult.discountAmount;
-        console.log(`🟢 Coupon discount applied: ${discount}`);
+      } else {
+        console.log('ℹ️ No promotion applied');
       }
 
-      // Calculate order totals with verified discount
+      // =====================================================
+      // STEP 3: CALCULATE TOTALS
+      // =====================================================
+      console.log('\n💰 STEP 3: Calculating totals...');
+
+      const totalAmount = await this.calculateItemsTotalAmount(items);
+      console.log('🛒 Cart total:', `₹${totalAmount}`);
+
+      let discount = promotionDiscount;
+      console.log('🎁 Promotion discount:', `₹${promotionDiscount}`);
+
+      // Apply coupon (optional, stackable)
+      let couponRedemption: any = null;
+      if (couponCode) {
+        console.log('🎫 Validating coupon:', couponCode);
+
+        try {
+          const validationResult = await this.Cupon.validate({
+            code: couponCode,
+            orderValue: totalAmount - promotionDiscount,
+            userId: user.id,
+          });
+
+          const couponDiscount = validationResult.discountAmount;
+          discount += couponDiscount;
+
+          console.log('✅ Coupon valid!', {
+            code: couponCode,
+            discount: `₹${couponDiscount}`,
+          });
+        } catch (error: any) {
+          console.warn('⚠️ Coupon validation failed:', error.message);
+          console.log('ℹ️ Continuing without coupon...');
+        }
+      }
+
       const totals = this.calculateOrderTotals(totalAmount, discount);
-      console.log(`🟡 Order totals:`, totals);
+      console.log('📊 Final totals:', {
+        subtotal: `₹${totalAmount}`,
+        discount: `₹${discount}`,
+        tax: `₹${totals.tax}`,
+        shipping: `₹${totals.shippingCost}`,
+        grandTotal: `₹${totals.grandTotal}`,
+      });
 
-      const { items, couponCode, appliedPromotion, ...orderData } = data; // get appliedPromotion here
+      // =====================================================
+      // STEP 4: CREATE RAZORPAY ORDER
+      // =====================================================
+      console.log('\n💳 STEP 4: Creating Razorpay order...');
 
-      // Create order
-      const createOrder = await executePrismaOperation(
-        'Order',
-        {
-          operation: PrismaOperationType.CREATE,
+      const razorpayOrder = await this.razorpay.orders.create({
+        amount: Math.round(totals.grandTotal * 100),
+        currency: 'INR',
+        receipt: `order_rcpt_${Date.now()}`,
+      });
+
+      console.log('✅ Razorpay order created:', {
+        id: razorpayOrder.id,
+        amount: `₹${razorpayOrder.amount / 100}`,
+      });
+
+      // =====================================================
+      // STEP 5: ATOMIC TRANSACTION (ALL OR NOTHING)
+      // =====================================================
+      console.log('\n🔄 STEP 5: Starting database transaction...');
+
+      const result = await this.db.client.$transaction(async (tx: any) => {
+        console.log('📝 Creating order record...');
+
+        // 5.1 CREATE ORDER
+        const order = await tx.Order.create({
           data: {
             ...orderData,
             user_id: user.user_id,
+            address_id: address.address_id,
             totalAmount: totals.totalAmount,
             discount,
-            tax: totals.tax,
-            shippingCost: totals.shippingCost,
+            tax: totals.tax || 0,
+            shippingCost: totals.shippingCost || 0,
             grandTotal: totals.grandTotal,
             status: OrderStatus.PENDING,
             paymentStatus: PaymentStatus.UNPAID,
             placedAt: new Date(),
           },
-        },
-        this.db.client,
-        this.logger,
-      );
-
-      console.log('create order is herere----->');
-      console.log(createOrder);
-
-      // Create order items
-      await this.createOrderItems(createOrder.data.id, createOrder.data.order_id, items);
-
-      // ===== Add Promotion Redemption Handling Here =====
-
-      let promotionRedemption = null;
-
-      if (appliedPromotion && appliedPromotion.promotion_id) {
-        // Create promotion redemption record
-        promotionRedemption = await this.db.client.promotionRedemption.create({
-          data: {
-            promotion_id: appliedPromotion.promotion_id,
-            order_id: createOrder.data.order_id,
-            user_id: user.user_id,
-            purchasedQuantity: items.reduce((sum: number, item: any) => sum + item.quantity, 0),
-            freeQuantity:
-              appliedPromotion.selectedFreeItems?.reduce(
-                (sum: number, item: any) => sum + item.quantity,
-                0,
-              ) || 0,
-            appliedAt: new Date(),
-          },
         });
 
-        // Create free item records and adjust stock
-        for (const freeItem of appliedPromotion.selectedFreeItems || []) {
-          await this.db.client.promotionFreeItem.create({
-            data: {
-              redemption_id: promotionRedemption.promotion_redemption_id,
-              product_id: freeItem.product_id,
-              size_variant_id: freeItem.size_variant_id,
-              quantity: freeItem.quantity,
-            },
-          });
+        console.log('✅ Order created:', `#${order.order_id}`);
 
-          // Deduct stock for free item
-          await this.db.client.productSizeVariant.update({
-            where: { product_size_var_id: freeItem.size_variant_id },
-            data: {
-              stock: { decrement: freeItem.quantity },
-              availableStock: { decrement: freeItem.quantity },
-            },
-          });
+        // 5.2 CREATE ORDER ITEMS (PURCHASED)
+        console.log('📦 Creating order items...');
 
-          // Optionally, create inventory log for transparency
-          if (this.db.client.sizeVariantInventoryLog) {
-            await this.db.client.sizeVariantInventoryLog.create({
-              data: {
-                product_size_var_id: freeItem.size_variant_id,
-                changeType: 'SALE',
-                quantityChanged: freeItem.quantity,
-                stockBeforeChange: 0, // should be real stock before change if tracked
-                stockAfterChange: 0, // should be real stock after change if tracked
-                referenceType: 'MANUAL',
-                referenceId: promotionRedemption.promotion_redemption_id.toString(),
-                changed_by: user.user_id,
-                remarks: `Free promotional item from promotion_id: ${appliedPromotion.promotion_id}`,
+        for (const item of items) {
+          const variant = await tx.ProductSizeVariant.findUnique({
+            where: { id: item.variant_id },
+            include: {
+              productColor: {
+                include: { product: true },
               },
+            },
+          });
+
+          if (!variant || variant.stock < item.quantity) {
+            throw new InvalidInputError(
+              `Insufficient stock for ${variant?.productColor?.product?.name || 'product'}`,
+            );
+          }
+
+          console.log(
+            `  ✅ ${variant.productColor?.product?.name} (${variant.size}) - Qty: ${item.quantity} × ₹${variant.price}`,
+          );
+
+          // Create order item
+          await tx.OrderItem.create({
+            data: {
+              order_id: order.order_id,
+              product_size_var_id: variant.product_size_var_id,
+              quantity: item.quantity,
+              price: variant.price,
+              total: variant.price * item.quantity,
+              isFree: false,
+            },
+          });
+
+          // Deduct stock
+          await tx.ProductSizeVariant.update({
+            where: { id: item.variant_id },
+            data: {
+              stock: { decrement: item.quantity },
+              availableStock: { decrement: item.quantity },
+            },
+          });
+
+          console.log(`     Stock: ${variant.stock} → ${variant.stock - item.quantity}`);
+        }
+
+        console.log(`✅ ${items.length} paid items created`);
+
+        // =====================================================
+        // 5.3 HANDLE PROMOTION REDEMPTION
+        // =====================================================
+        let promotionRedemption = null;
+
+        if (appliedPromotion?.promotion_id && promotionValidation?.isEligible) {
+          console.log(`\n🎁 Processing ${promotionValidation.type} promotion...`);
+
+          // Create redemption record
+          promotionRedemption = await tx.PromotionRedemption.create({
+            data: {
+              promotion_id: appliedPromotion.promotion_id,
+              order_id: order.order_id,
+              user_id: user.user_id,
+              purchasedQuantity: items.reduce((sum: number, item: any) => sum + item.quantity, 0),
+              freeQuantity:
+                appliedPromotion.selectedFreeItems?.reduce(
+                  (sum: number, item: any) => sum + item.quantity,
+                  0,
+                ) || 0,
+              appliedAt: new Date(),
+            },
+          });
+
+          console.log('✅ Promotion redemption record created');
+
+          // ✅ FIX 5: Handle different promotion types
+          switch (promotionValidation.type) {
+            case 'BUY_X_GET_Y_FREE':
+              if (appliedPromotion.selectedFreeItems?.length > 0) {
+                console.log(`🎁 Adding ${appliedPromotion.selectedFreeItems.length} free items...`);
+
+                for (const freeItem of appliedPromotion.selectedFreeItems) {
+                  const freeVariant = await tx.ProductSizeVariant.findUnique({
+                    where: { product_size_var_id: freeItem.size_variant_id },
+                    include: {
+                      productColor: {
+                        include: { product: true },
+                      },
+                    },
+                  });
+
+                  if (!freeVariant || freeVariant.stock < freeItem.quantity) {
+                    throw new InvalidInputError(
+                      `Free item out of stock: ${freeVariant?.productColor?.product?.name}`,
+                    );
+                  }
+
+                  console.log(
+                    `  🎁 FREE: ${freeVariant.productColor?.product?.name} (${freeVariant.size}) - Qty: ${freeItem.quantity}`,
+                  );
+
+                  // CREATE ORDER ITEM FOR FREE PRODUCT
+                  await tx.OrderItem.create({
+                    data: {
+                      order_id: order.order_id,
+                      product_size_var_id: freeItem.size_variant_id,
+                      quantity: freeItem.quantity,
+                      price: 0,
+                      total: 0,
+                      isFree: true,
+                    },
+                  });
+
+                  // Track in PromotionFreeItem
+                  await tx.PromotionFreeItem.create({
+                    data: {
+                      redemption_id: promotionRedemption.promotion_redemption_id,
+                      product_id: freeItem.product_id,
+                      size_variant_id: freeItem.size_variant_id,
+                      quantity: freeItem.quantity,
+                    },
+                  });
+
+                  // Deduct stock for free item
+                  await tx.ProductSizeVariant.update({
+                    where: { product_size_var_id: freeItem.size_variant_id },
+                    data: {
+                      stock: { decrement: freeItem.quantity },
+                      availableStock: { decrement: freeItem.quantity },
+                    },
+                  });
+
+                  // CREATE INVENTORY LOG
+                  await tx.SizeVariantInventoryLog.create({
+                    data: {
+                      product_size_var_id: freeItem.size_variant_id,
+                      changeType: 'SALE',
+                      quantityChanged: freeItem.quantity,
+                      referenceType: 'ORDER',
+                      referenceId: promotionRedemption.promotion_redemption_id.toString(),
+                      changed_by: user.user_id,
+                      remarks: `Free item from promotion #${appliedPromotion.promotion_id}`,
+                      stockBeforeChange: freeVariant.stock,
+                      stockAfterChange: freeVariant.stock - freeItem.quantity,
+                    },
+                  });
+
+                  console.log(
+                    `     Stock: ${freeVariant.stock} → ${freeVariant.stock - freeItem.quantity}`,
+                  );
+                }
+
+                console.log(`✅ ${appliedPromotion.selectedFreeItems.length} free items added`);
+              }
+              break;
+
+            case 'QUANTITY_DISCOUNT':
+              console.log(`💰 QUANTITY_DISCOUNT applied: ₹${promotionDiscount}`);
+              break;
+
+            case 'BUNDLE_DEAL':
+              console.log(`📦 BUNDLE_DEAL applied: ₹${promotionDiscount}`);
+              break;
+
+            case 'TIERED_DISCOUNT':
+              console.log(`🏆 TIERED_DISCOUNT applied: ₹${promotionDiscount}`);
+              break;
+          }
+
+          // INCREMENT PROMOTION USAGE COUNT (ATOMIC)
+          await tx.Promotion.update({
+            where: { promotion_id: appliedPromotion.promotion_id },
+            data: {
+              usedCount: { increment: 1 },
+            },
+          });
+
+          console.log('✅ Promotion usage count incremented');
+        }
+
+        // 5.4 REDEEM COUPON (OPTIONAL)
+        if (couponCode) {
+          console.log('🎫 Redeeming coupon:', couponCode);
+
+          try {
+            couponRedemption = await this.Cupon.redeem({
+              code: couponCode,
+              orderValue: totalAmount,
+              userId: user.id,
+              orderId: order.order_id,
             });
+            console.log('✅ Coupon redeemed successfully');
+          } catch (error: any) {
+            console.warn('⚠️ Coupon redemption failed:', error.message);
           }
         }
-      }
 
-      // Redeem coupon if present (existing logic)
-      if (data.couponCode) {
-        const user = await this.db.client.user.findUnique({
-          where: { user_id: data.user_id },
-        });
-        if (!user) {
-          throw new InvalidInputError('user is not found');
-        }
-        console.log(`🟡 Redeeming coupon: ${data.couponCode}`);
-        couponRedemption = await couponService.redeem({
-          code: data.couponCode,
-          orderValue: totalAmount,
-          userId: user.id,
-          orderId: createOrder.data.order_id,
-        });
-        console.log('🟢 Coupon redemption result:', couponRedemption);
-      }
+        return { order, promotionRedemption, couponRedemption };
+      });
 
-      // Fetch complete order
-      const completeOrder = await this.getById(createOrder.data.order_id);
+      console.log('\n✅ Transaction completed successfully!');
 
-      console.log(
-        `✅ Order #${createOrder.data.order_id} created successfully with reserved stock`,
-        { couponApplied: !!data.couponCode, discount, promotionRedemption },
-      );
+      // =====================================================
+      // STEP 6: FETCH COMPLETE ORDER
+      // =====================================================
+      console.log('📦 Fetching complete order details...');
 
-      return completeOrder as any;
+      const completeOrder = await this.getById(result.order.order_id);
+
+      console.log('\n🎉 ===== ORDER CREATED SUCCESSFULLY =====');
+      console.log('📊 Order Summary:', {
+        orderId: result.order.order_id,
+        promotionType: promotionValidation?.type || 'None',
+        promotionApplied: !!appliedPromotion,
+        couponApplied: !!couponCode,
+        totalDiscount: `₹${discount}`,
+        grandTotal: `₹${totals.grandTotal}`,
+        paidItems: items.length,
+        freeItems: appliedPromotion?.selectedFreeItems?.length || 0,
+      });
+
+      return {
+        ...completeOrder,
+        razorpay_order_id: razorpayOrder.id,
+        razorpay_amount: razorpayOrder.amount,
+        razorpay_currency: razorpayOrder.currency,
+        razorpay_receipt: razorpayOrder.receipt,
+      };
     } catch (error: any) {
-      console.error('❌ Error creating order', { error: error.message });
+      console.error('\n❌ ===== ORDER CREATION FAILED =====');
+      console.error('Error:', error.message);
+      console.error('Stack:', error.stack);
       throw new Error(error.message);
     }
   }
@@ -1382,4 +2022,6 @@ export class OrdersService implements IService, IOrdersService {
       throw new Error(error.message);
     }
   }
+
+  //LATEST METHOD
 }

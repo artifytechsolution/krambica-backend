@@ -24,7 +24,7 @@ import { InvalidInputError } from '../../utils/error.utils';
 import { executePrismaOperation, PrismaOperationType } from '../../utils/prisma.utils';
 import { IDatabaseService } from '../../interfaces/database-service.interface';
 import { buildPrismaQuery, parseQueryParams } from '../../utils/prisma-query-builder';
-import _ from 'lodash';
+import _, { includes } from 'lodash';
 import { IProductsService } from '../../interfaces/products-service.interface';
 
 @injectable()
@@ -569,6 +569,142 @@ export class PromotionService implements IService, IPromotionsService {
     }
   }
 
+  async ListEligibleProducts(data?: any): Promise<any> {
+    try {
+      // Define allowed fields for filtering and search
+      const allowedFields = {
+        // ========== Direct PromotionEligibleProduct Fields ==========
+        id: 'uuid',
+        promotion_id: 'uuid',
+        product_id: 'uuid',
+        category_id: 'uuid',
+        discountType: 'enum',
+        discountValue: 'float',
+        maxDiscountAmount: 'float',
+        minPurchaseAmount: 'float',
+        createdAt: 'datetime',
+        updatedAt: 'datetime',
+
+        'product.name': 'string',
+        'product.slug': 'string',
+
+        // ========== Category Relations ==========
+        'category.id': 'uuid',
+        'category.category_id': 'int',
+        'category.name': 'string',
+        'category.slug': 'string',
+        'category.description': 'string',
+
+        // ========== Promotion Relations ==========
+
+        'promotion.name': 'string',
+      } as const;
+
+      // Handle both body and query params format
+      let filters = [];
+      let page = 1;
+      let limit = 10;
+      let globalSearch = '';
+
+      if (data) {
+        if (data.filters && Array.isArray(data.filters)) {
+          // Body format
+          filters = data.filters;
+          page = data.page || 1;
+          limit = data.limit || 10;
+          globalSearch = data.globalSearch || '';
+        } else {
+          // Query params format
+          const parsed = parseQueryParams(data);
+          filters = parsed.filters;
+          page = parsed.page;
+          limit = parsed.limit;
+          globalSearch = parsed.globalSearch || '';
+        }
+      }
+
+      // Define fields to combine for global search
+      const combineFieldsGroups = [
+        ['product.name', 'product.slug', 'product.sku'],
+        ['category.name', 'category.slug'],
+        ['promotion.name', 'promotion.code'],
+      ];
+
+      // Build dynamic filters using buildPrismaQuery
+      const { where, orderBy, skip, take } = buildPrismaQuery(
+        filters,
+        allowedFields,
+        page,
+        limit,
+        globalSearch,
+        combineFieldsGroups,
+      );
+
+      // Execute queries in parallel
+      const [eligibleProducts, totalCount] = await Promise.all([
+        this.db.client.promotionEligibleProduct.findMany({
+          where,
+          orderBy: orderBy.length > 0 ? orderBy : { createdAt: 'desc' },
+          skip,
+          take,
+          include: {
+            product: {
+              include: {
+                colors: {
+                  take: 1, // Only fetch the first color
+                  include: {
+                    images: {
+                      where: { isPrimary: true },
+                      take: 2, // Fetch primary image + video if available
+                    },
+                    sizeVariants: true,
+                  },
+                },
+                category: true,
+                images: {
+                  where: { isPrimary: true },
+                },
+              },
+            },
+            category: {
+              include: {
+                products: {
+                  select: {
+                    product_id: true,
+                    name: true,
+                    basePrice: true,
+                    slug: true,
+                  },
+                  take: 5, // Limit related products
+                },
+              },
+            },
+            promotion: true,
+          },
+        }),
+        this.db.client.promotionEligibleProduct.count({ where }),
+      ]);
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(totalCount / take);
+
+      return {
+        success: true,
+        data: eligibleProducts,
+        pagination: {
+          total: totalCount,
+          page,
+          limit: take,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      };
+    } catch (error: any) {
+      throw new InvalidInputError(error.message);
+    }
+  }
+
   async getEligibleProducts(promotionId: string, queryParams?: any): Promise<any> {
     try {
       const item = await this.getPromotionById(promotionId);
@@ -746,7 +882,13 @@ export class PromotionService implements IService, IPromotionsService {
 
   async getFreeProducts(promotionId: string, queryParams?: any): Promise<any> {
     try {
-      const item = await this.getPromotionById(promotionId);
+      const item = await this.db.client.PromotionFreeProduct.findFirst({
+        where: {
+          promotion_id: parseInt(promotionId),
+        },
+      });
+      console.log('promotion is herere------>');
+      console.log(promotionId);
       if (!item) throw new InvalidInputError('Promotion not found');
 
       const { filters, page, limit, globalSearch } = parseQueryParams(queryParams || {});
@@ -776,14 +918,19 @@ export class PromotionService implements IService, IPromotionsService {
         include: {
           product: {
             include: {
-              images: true,
+              reviews: true,
+              category: true,
               colors: {
+                take: 1, // only fetch the first color
                 include: {
-                  images: true,
-                  sizeVariants: {
-                    where: { isAvailable: true },
+                  images: {
+                    where: { isPrimary: true },
+                    take: 2, // fetch image + video if available
                   },
                 },
+              },
+              images: {
+                where: { isPrimary: true },
               },
             },
           },
@@ -973,6 +1120,129 @@ export class PromotionService implements IService, IPromotionsService {
     }
   }
 
+  // async getAvailableFreeProducts(
+  //   promotionId: string,
+  //   cartItems: CartItem[],
+  // ): Promise<FreeProductOption[]> {
+  //   try {
+  //     const promotion = await this.getPromotionById(promotionId);
+  //     if (!promotion) throw new InvalidInputError('Promotion not found');
+
+  //     if (promotion.type !== PromotionType.BUY_X_GET_Y_FREE) {
+  //       throw new InvalidInputError('This promotion does not offer free products');
+  //     }
+
+  //     const validation = await this.validateBuyXGetY(promotion, cartItems);
+  //     if (!validation.isEligible || !validation.freeItemsEarned) {
+  //       throw new InvalidInputError('Cart does not qualify for free products');
+  //     }
+
+  //     const freeProducts = await this.db.client.promotionFreeProduct.findMany({
+  //       where: { promotion_id: promotion.promotion_id },
+  //       include: {
+  //         product: {
+  //           include: {
+  //             images: true,
+  //             colors: {
+  //               include: {
+  //                 images: true,
+  //                 sizeVariants: {
+  //                   where: {
+  //                     isAvailable: true,
+  //                     stock: { gt: 0 },
+  //                   },
+  //                 },
+  //               },
+  //             },
+  //           },
+  //         },
+  //         sizeVariant: {
+  //           where: {
+  //             isAvailable: true,
+  //             stock: { gt: 0 },
+  //           },
+  //           include: {
+  //             productColor: {
+  //               include: {
+  //                 product: true,
+  //                 images: true,
+  //               },
+  //             },
+  //           },
+  //         },
+  //       },
+  //       orderBy: { displayOrder: 'asc' },
+  //     });
+
+  //     const availableFreeProducts: FreeProductOption[] = freeProducts
+  //       .filter((fp: any) => {
+  //         if (fp.size_variant_id) {
+  //           return fp.sizeVariant && fp.sizeVariant.stock > 0;
+  //         }
+  //         if (fp.product_id) {
+  //           return (
+  //             fp.product &&
+  //             fp.product.colors.some((color: any) =>
+  //               color.sizeVariants.some((sv: any) => sv.stock > 0),
+  //             )
+  //           );
+  //         }
+  //         return false;
+  //       })
+  //       .map((fp: any) => {
+  //         const maxSelectableQuantity = Math.min(
+  //           validation.freeItemsEarned!,
+  //           fp.maxQuantity || validation.freeItemsEarned!,
+  //         );
+
+  //         let productName = '';
+  //         let colorName = '';
+  //         let size = '';
+  //         let price = 0;
+  //         let stock = 0;
+  //         let images: string[] = [];
+
+  //         if (fp.size_variant_id && fp.sizeVariant) {
+  //           const sv = fp.sizeVariant;
+  //           productName = sv.productColor.product.name;
+  //           colorName = sv.productColor.color_name;
+  //           size = sv.size;
+  //           price = sv.price;
+  //           stock = sv.stock;
+  //           images = sv.productColor.images.map((img: any) => img.url);
+  //         } else if (fp.product_id && fp.product) {
+  //           productName = fp.product.name;
+  //           price = fp.product.basePrice;
+  //           stock = fp.product.colors.reduce(
+  //             (sum: any, color: any) =>
+  //               sum + color.sizeVariants.reduce((s: any, sv: any) => s + sv.stock, 0),
+  //             0,
+  //           );
+  //           images = fp.product.images.map((img: any) => img.url);
+  //         }
+
+  //         return {
+  //           promotion_free_prod_id: fp.promotion_free_prod_id,
+  //           product_id: fp.product_id,
+  //           size_variant_id: fp.size_variant_id,
+  //           productName,
+  //           colorName,
+  //           size,
+  //           price,
+  //           stock,
+  //           maxSelectableQuantity,
+  //           images,
+  //           displayOrder: fp.displayOrder,
+  //         };
+  //       });
+
+  //     return availableFreeProducts;
+  //   } catch (error: any) {
+  //     throw new InvalidInputError(error.message);
+  //   }
+  // }
+
+  //latest code properly implemented - 2 buy 1 free
   async getAvailableFreeProducts(
     promotionId: string,
     cartItems: CartItem[],
@@ -985,13 +1255,17 @@ export class PromotionService implements IService, IPromotionsService {
         throw new InvalidInputError('This promotion does not offer free products');
       }
 
+      // Validate cart eligibility
       const validation = await this.validateBuyXGetY(promotion, cartItems);
       if (!validation.isEligible || !validation.freeItemsEarned) {
         throw new InvalidInputError('Cart does not qualify for free products');
       }
 
+      // Fetch all available free products configured for this promotion
       const freeProducts = await this.db.client.promotionFreeProduct.findMany({
-        where: { promotion_id: promotion.promotion_id },
+        where: {
+          promotion_id: promotion.promotion_id,
+        },
         include: {
           product: {
             include: {
@@ -1009,85 +1283,67 @@ export class PromotionService implements IService, IPromotionsService {
               },
             },
           },
-          sizeVariant: {
-            where: {
-              isAvailable: true,
-              stock: { gt: 0 },
-            },
-            include: {
-              productColor: {
-                include: {
-                  product: true,
-                  images: true,
-                },
-              },
-            },
-          },
         },
         orderBy: { displayOrder: 'asc' },
       });
 
-      const availableFreeProducts: FreeProductOption[] = freeProducts
-        .filter((fp: any) => {
-          if (fp.size_variant_id) {
-            return fp.sizeVariant && fp.sizeVariant.stock > 0;
-          }
-          if (fp.product_id) {
-            return (
-              fp.product &&
-              fp.product.colors.some((color: any) =>
-                color.sizeVariants.some((sv: any) => sv.stock > 0),
-              )
-            );
-          }
-          return false;
-        })
-        .map((fp: any) => {
-          const maxSelectableQuantity = Math.min(
-            validation.freeItemsEarned!,
-            fp.maxQuantity || validation.freeItemsEarned!,
-          );
+      // Format free products with full details for frontend display
+      const availableFreeProducts: FreeProductOption[] = [];
 
-          let productName = '';
-          let colorName = '';
-          let size = '';
-          let price = 0;
-          let stock = 0;
-          let images: string[] = [];
+      for (const fp of freeProducts) {
+        if (!fp.product) continue;
 
-          if (fp.size_variant_id && fp.sizeVariant) {
-            const sv = fp.sizeVariant;
-            productName = sv.productColor.product.name;
-            colorName = sv.productColor.color_name;
-            size = sv.size;
-            price = sv.price;
-            stock = sv.stock;
-            images = sv.productColor.images.map((img: any) => img.url);
-          } else if (fp.product_id && fp.product) {
-            productName = fp.product.name;
-            price = fp.product.basePrice;
-            stock = fp.product.colors.reduce(
-              (sum: any, color: any) =>
-                sum + color.sizeVariants.reduce((s: any, sv: any) => s + sv.stock, 0),
-              0,
-            );
-            images = fp.product.images.map((img: any) => img.url);
+        // Check if product has available stock
+        const hasStock = fp.product.colors.some((color: any) =>
+          color.sizeVariants.some((sv: any) => sv.stock > 0),
+        );
+
+        if (!hasStock) continue;
+
+        // Get all available size variants across all colors
+        const availableVariants: any[] = [];
+        for (const color of fp.product.colors) {
+          for (const sizeVariant of color.sizeVariants) {
+            if (sizeVariant.stock > 0 && sizeVariant.isAvailable) {
+              availableVariants.push({
+                product_size_var_id: sizeVariant.product_size_var_id,
+                size: sizeVariant.size,
+                price: sizeVariant.price,
+                stock: sizeVariant.stock,
+                colorName: color.color_name,
+                colorCode: color.color_code,
+                colorId: color.product_color_var_id,
+                images: color.images.map((img: any) => img.url),
+              });
+            }
           }
+        }
 
-          return {
-            promotion_free_prod_id: fp.promotion_free_prod_id,
-            product_id: fp.product_id,
-            size_variant_id: fp.size_variant_id,
-            productName,
-            colorName,
-            size,
-            price,
-            stock,
-            maxSelectableQuantity,
-            images,
-            displayOrder: fp.displayOrder,
-          };
+        if (availableVariants.length === 0) continue;
+
+        // Calculate max selectable quantity for this product
+        // User earned freeItemsEarned total free items, but each product has maxQuantity limit
+        const maxSelectableQuantity = Math.min(
+          validation.freeItemsEarned!,
+          fp.maxQuantity || validation.freeItemsEarned!,
+        );
+
+        // Add product to available list
+        availableFreeProducts.push({
+          promotion_free_prod_id: fp.promotion_free_prod_id,
+          product_id: fp.product_id,
+          productName: fp.product.name,
+          basePrice: fp.product.basePrice,
+          maxSelectableQuantity, // How many of THIS product user can select
+          totalFreeItemsEarned: validation.freeItemsEarned!, // Total free items user earned
+          displayOrder: fp.displayOrder,
+          availableVariants, // All size/color combinations with stock
+          primaryImage:
+            fp.product.images.find((img: any) => img.isPrimary)?.url ||
+            fp.product.images[0]?.url ||
+            '',
         });
+      }
 
       return availableFreeProducts;
     } catch (error: any) {
@@ -1155,7 +1411,15 @@ export class PromotionService implements IService, IPromotionsService {
     cartItems: CartItem[],
   ): Promise<DiscountCalculation> {
     try {
-      const promotion = await this.getPromotionById(promotionId);
+      console.log(promotionId);
+      const promotion = await this.db.client.promotion.findUnique({
+        where: {
+          promotion_id: promotionId,
+        },
+        include: {
+          eligibleProducts: true,
+        },
+      });
       console.log('i am in calculatediscount promotion section');
       console.log(promotion);
       if (!promotion) throw new InvalidInputError('Promotion not found');
@@ -1168,11 +1432,12 @@ export class PromotionService implements IService, IPromotionsService {
       if (now < new Date(promotion.validFrom) || now > new Date(promotion.validTo)) {
         throw new InvalidInputError('Promotion is not valid at this time');
       }
-
+      console.log('cartItems123-------->');
+      console.log(cartItems);
       // First, retrieve actual price from productSizeVariant table for each cart item
       const sizeVariantIds = cartItems.map((item) => item.product_size_var_id);
       const variantData = await this.db.client.productSizeVariant.findMany({
-        where: { product_size_var_id: { in: sizeVariantIds } },
+        where: { id: { in: sizeVariantIds } },
         select: {
           product_size_var_id: true,
           price: true,
@@ -1191,12 +1456,18 @@ export class PromotionService implements IService, IPromotionsService {
       });
 
       let discountDetails: any;
+      console.log('discount details ie here----->');
+      console.log(discountDetails);
+      console.log(updatedCartItems);
 
       switch (promotion.type) {
         case PromotionType.BUY_X_GET_Y_FREE:
+          console.log('hello inside switch ------ BUY_X_GET_Y_FREE');
           discountDetails = await this.calculateBuyXGetYDiscount(promotion, updatedCartItems);
           break;
         case PromotionType.QUANTITY_DISCOUNT:
+          console.log('hello inside switch ------QUANTITY_DISCOUNT');
+          console.log(updatedCartItems);
           discountDetails = await this.calculateQuantityDiscountAmount(promotion, updatedCartItems);
           break;
         case PromotionType.BUNDLE_DEAL:
@@ -1208,6 +1479,8 @@ export class PromotionService implements IService, IPromotionsService {
         default:
           throw new InvalidInputError('Unknown promotion type');
       }
+      console.log('final discount details ie here----->');
+      console.log(discountDetails);
 
       // Calculate cart total from updated items with real prices
       const cartTotal = updatedCartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -1539,52 +1812,302 @@ export class PromotionService implements IService, IPromotionsService {
     }
   }
 
+  // private async validateBuyXGetY(
+  //   promotion: any,
+  //   cartItems: CartItem[],
+  // ): Promise<PromotionValidationResult> {
+  //   console.log('validateBuyXGetY called');
+  //   console.log('promotion:', promotion);
+  //   const eligibleProductIds = this.getEligibleProductIds(promotion);
+  //   console.log('eligibleProductIds:', eligibleProductIds);
+  //   const eligibleCategoryIds = this.getEligibleCategoryIds(promotion);
+  //   console.log('eligibleCategoryIds', eligibleCategoryIds);
+  //   const categoryProducts = await this.getProductsInCategories(eligibleCategoryIds);
+  //   console.log('categoryProducts:', categoryProducts);
+  //   const allEligibleProductIds = [
+  //     ...eligibleProductIds,
+  //     ...categoryProducts.map((p) => p.product_id),
+  //   ];
+  //   console.log('allEligibleProductIds:', allEligibleProductIds);
+
+  //   const eligibleQuantity = cartItems
+  //     .filter((item) => allEligibleProductIds.includes(item.product_id))
+  //     .reduce((sum, item) => sum + item.quantity, 0);
+  //   console.log(eligibleQuantity);
+  //   const totalSets = promotion.buyQuantity + promotion.getQuantity;
+  //   console.log('totel set is hereêee', totalSets);
+  //   const qualifyingSets = Math.floor(eligibleQuantity / totalSets);
+  //   console.log('qualifyingSets:', qualifyingSets);
+  //   const freeItemsEarned = qualifyingSets * promotion.getQuantity;
+  //   console.log('freeItemsEarned:', freeItemsEarned);
+
+  //   if (freeItemsEarned > 0) {
+  //     return {
+  //       isEligible: true,
+  //       promotion_id: promotion.promotion_id,
+  //       type: PromotionType.BUY_X_GET_Y_FREE,
+  //       freeItemsEarned,
+  //       message: `Buy ${promotion.buyQuantity}, Get ${promotion.getQuantity} Free! You've earned ${freeItemsEarned} free item(s).`,
+  //       details: {
+  //         purchasedQuantity: eligibleQuantity,
+  //         qualifyingSets,
+  //         buyQuantity: promotion.buyQuantity,
+  //         getQuantity: promotion.getQuantity,
+  //       },
+  //     };
+  //   }
+
+  //   return { isEligible: false };
+  // }
+  //latest code validateBuyXGetY - after 2 buy 1 free (OLD 2)
+  // private async validateBuyXGetY(
+  //   promotion: any,
+  //   cartItems: CartItem[],
+  // ): Promise<PromotionValidationResult> {
+  //   console.log('validateBuyXGetY called');
+  //   console.log('promotion:', promotion);
+
+  //   // Get eligible product IDs from promotion
+  //   const eligibleProductIds = this.getEligibleProductIds(promotion);
+  //   console.log('eligibleProductIds:', eligibleProductIds);
+
+  //   // Get eligible categories
+  //   const eligibleCategoryIds = this.getEligibleCategoryIds(promotion);
+  //   console.log('eligibleCategoryIds', eligibleCategoryIds);
+
+  //   // Get all products in eligible categories
+  //   const categoryProducts = await this.getProductsInCategories(eligibleCategoryIds);
+  //   console.log('categoryProducts:', categoryProducts);
+
+  //   // Combine product IDs from both direct products and categories
+  //   const allEligibleProductIds = [
+  //     ...eligibleProductIds,
+  //     ...categoryProducts.map((p) => p.product_id),
+  //   ];
+  //   console.log('allEligibleProductIds:', allEligibleProductIds);
+
+  //   // CRITICAL FIX: Count ONLY eligible products in cart (not total sets)
+  //   const eligibleQuantity = cartItems
+  //     .filter((item) => allEligibleProductIds.includes(item.product_id))
+  //     .reduce((sum, item) => sum + item.quantity, 0);
+  //   console.log('eligibleQuantity (purchased):', eligibleQuantity);
+
+  //   // Check if user has bought minimum required quantity
+  //   // Example: promotion.buyQuantity = 2 (Buy 2)
+  //   if (eligibleQuantity < promotion.buyQuantity) {
+  //     // Not enough items purchased to qualify
+  //     return {
+  //       isEligible: false,
+  //       message: `Buy ${promotion.buyQuantity} eligible items to get ${promotion.getQuantity} free item(s). You have ${eligibleQuantity} eligible items.`,
+  //     };
+  //   }
+
+  //   // Calculate how many complete "Buy X" sets the user has
+  //   // Example: User bought 5 items, buyQuantity = 2
+  //   // qualifyingSets = Math.floor(5 / 2) = 2 sets
+  //   const qualifyingSets = Math.floor(eligibleQuantity / promotion.buyQuantity);
+  //   console.log('qualifyingSets:', qualifyingSets);
+
+  //   // Calculate free items earned
+  //   // Example: qualifyingSets = 2, getQuantity = 1
+  //   // freeItemsEarned = 2 * 1 = 2 free items
+  //   const freeItemsEarned = qualifyingSets * promotion.getQuantity;
+  //   console.log('freeItemsEarned:', freeItemsEarned);
+
+  //   // User qualifies for free products
+  //   if (freeItemsEarned > 0) {
+  //     return {
+  //       isEligible: true,
+  //       promotion_id: promotion.promotion_id,
+  //       type: PromotionType.BUY_X_GET_Y_FREE,
+  //       freeItemsEarned, // How many free items user can select
+  //       message: `Buy ${promotion.buyQuantity}, Get ${promotion.getQuantity} Free! You've earned ${freeItemsEarned} free item(s).`,
+  //       details: {
+  //         purchasedQuantity: eligibleQuantity,
+  //         qualifyingSets,
+  //         buyQuantity: promotion.buyQuantity,
+  //         getQuantity: promotion.getQuantity,
+  //         eligibleProductIds: allEligibleProductIds, // For frontend validation
+  //       },
+  //     };
+  //   }
+
+  //   return {
+  //     isEligible: false,
+  //     message: `Not enough qualifying items purchased.`,
+  //   };
+  // }
   private async validateBuyXGetY(
     promotion: any,
     cartItems: CartItem[],
   ): Promise<PromotionValidationResult> {
-    console.log('validateBuyXGetY called');
-    console.log('promotion:', promotion);
-    const eligibleProductIds = this.getEligibleProductIds(promotion);
-    console.log('eligibleProductIds:', eligibleProductIds);
-    const eligibleCategoryIds = this.getEligibleCategoryIds(promotion);
-    console.log('eligibleCategoryIds', eligibleCategoryIds);
-    const categoryProducts = await this.getProductsInCategories(eligibleCategoryIds);
-    console.log('categoryProducts:', categoryProducts);
-    const allEligibleProductIds = [
-      ...eligibleProductIds,
-      ...categoryProducts.map((p) => p.product_id),
-    ];
-    console.log('allEligibleProductIds:', allEligibleProductIds);
+    try {
+      console.log('🔍 Validating Buy X Get Y promotion', {
+        promotionId: promotion.promotion_id,
+        cartItemsCount: cartItems.length,
+        buyQuantity: promotion.buyQuantity,
+        getQuantity: promotion.getQuantity,
+      });
 
-    const eligibleQuantity = cartItems
-      .filter((item) => allEligibleProductIds.includes(item.product_id))
-      .reduce((sum, item) => sum + item.quantity, 0);
-    console.log(eligibleQuantity);
-    const totalSets = promotion.buyQuantity + promotion.getQuantity;
-    console.log('totel set is hereêee', totalSets);
-    const qualifyingSets = Math.floor(eligibleQuantity / totalSets);
-    console.log('qualifyingSets:', qualifyingSets);
-    const freeItemsEarned = qualifyingSets * promotion.getQuantity;
-    console.log('freeItemsEarned:', freeItemsEarned);
+      // ✅ 1. CHECK PROMOTION STATUS
+      if (promotion.status !== 'ACTIVE') {
+        console.log('❌ Promotion is not active', { status: promotion.status });
+        return {
+          isEligible: false,
+          message: 'Promotion is not active',
+        };
+      }
 
-    if (freeItemsEarned > 0) {
-      return {
-        isEligible: true,
-        promotion_id: promotion.promotion_id,
-        type: PromotionType.BUY_X_GET_Y_FREE,
+      // ✅ 2. CHECK EXPIRY
+      const now = new Date();
+      if (now < new Date(promotion.validFrom) || now > new Date(promotion.validTo)) {
+        console.log('❌ Promotion expired or not started', {
+          now: now.toISOString(),
+          validFrom: promotion.validFrom,
+          validTo: promotion.validTo,
+        });
+        return {
+          isEligible: false,
+          message: 'Promotion has expired or not yet started',
+        };
+      }
+
+      // ✅ 3. GET ELIGIBLE PRODUCTS
+      const eligibleProductIds = this.getEligibleProductIds(promotion);
+      const eligibleCategoryIds = this.getEligibleCategoryIds(promotion);
+
+      console.log('📦 Eligible products/categories', {
+        productIds: eligibleProductIds,
+        categoryIds: eligibleCategoryIds,
+      });
+
+      // Get products in eligible categories
+      let categoryProducts: any[] = [];
+      try {
+        categoryProducts = await this.getProductsInCategories(eligibleCategoryIds);
+        console.log('✅ Category products fetched', { count: categoryProducts.length });
+      } catch (error) {
+        console.error('❌ Failed to get category products', error);
+        return {
+          isEligible: false,
+          message: 'Error validating promotion eligibility',
+        };
+      }
+
+      // Combine all eligible product IDs
+      const allEligibleProductIds = [
+        ...eligibleProductIds,
+        ...categoryProducts.map((p) => p.product_id),
+      ];
+
+      console.log('📋 All eligible product IDs', {
+        totalCount: allEligibleProductIds.length,
+        productIds: allEligibleProductIds,
+      });
+
+      if (allEligibleProductIds.length === 0) {
+        console.warn('⚠️ No eligible products found for promotion', {
+          promotionId: promotion.promotion_id,
+        });
+        return {
+          isEligible: false,
+          message: 'No eligible products in promotion',
+        };
+      }
+      console.log('allEligibleProductIds-------');
+      console.log(allEligibleProductIds);
+      // ✅ 4. COUNT ELIGIBLE ITEMS IN CART
+      const eligibleQuantity = cartItems
+        .filter((item) => allEligibleProductIds.includes(item.product_id))
+        .reduce((sum, item) => sum + item.quantity, 0);
+      console.log('eligibleQuantity----->');
+      console.log(eligibleQuantity);
+
+      console.log('🛒 Eligible quantity calculated', {
+        eligibleQuantity,
+        requiredQuantity: promotion.buyQuantity,
+        cartItems: cartItems.map((item) => ({
+          productId: item.product_id,
+          quantity: item.quantity,
+          isEligible: allEligibleProductIds.includes(item.product_id),
+        })),
+      });
+
+      // ✅ 5. CHECK MINIMUM PURCHASE REQUIREMENT
+      if (eligibleQuantity < promotion.buyQuantity) {
+        console.log('❌ Not enough items to qualify', {
+          required: promotion.buyQuantity,
+          current: eligibleQuantity,
+          remaining: promotion.buyQuantity - eligibleQuantity,
+        });
+
+        return {
+          isEligible: false,
+          message: `Buy ${promotion.buyQuantity} eligible items to get ${promotion.getQuantity} free. You have ${eligibleQuantity} eligible items.`,
+          details: {
+            required: promotion.buyQuantity,
+            current: eligibleQuantity,
+            remaining: promotion.buyQuantity - eligibleQuantity,
+          },
+        };
+      }
+
+      // ✅ 6. CALCULATE QUALIFYING SETS
+      const qualifyingSets = Math.floor(eligibleQuantity / promotion.buyQuantity);
+      const freeItemsEarned = qualifyingSets * promotion.getQuantity;
+      const remainingItems = eligibleQuantity % promotion.buyQuantity;
+
+      console.log('✅ Promotion qualification successful!', {
+        promotionId: promotion.promotion_id,
+        promotionName: promotion.name,
+        eligibleQuantity,
+        qualifyingSets,
         freeItemsEarned,
-        message: `Buy ${promotion.buyQuantity}, Get ${promotion.getQuantity} Free! You've earned ${freeItemsEarned} free item(s).`,
-        details: {
-          purchasedQuantity: eligibleQuantity,
-          qualifyingSets,
-          buyQuantity: promotion.buyQuantity,
-          getQuantity: promotion.getQuantity,
-        },
+        remainingItems,
+      });
+
+      // ✅ 7. RETURN SUCCESS
+      if (freeItemsEarned > 0) {
+        return {
+          isEligible: true,
+          promotion_id: promotion.promotion_id,
+          promotionName: promotion.name,
+          type: PromotionType.BUY_X_GET_Y_FREE,
+          freeItemsEarned,
+          message: `Buy ${promotion.buyQuantity}, Get ${promotion.getQuantity} Free! You've earned ${freeItemsEarned} free item(s).`,
+          details: {
+            purchasedQuantity: eligibleQuantity,
+            qualifyingSets,
+            buyQuantity: promotion.buyQuantity,
+            getQuantity: promotion.getQuantity,
+            eligibleProductIds: allEligibleProductIds,
+            remainingItems, // Items that don't form a complete set
+          },
+        };
+      }
+
+      // Should never reach here, but safety fallback
+      console.warn('⚠️ Unexpected state: freeItemsEarned is 0', {
+        qualifyingSets,
+        getQuantity: promotion.getQuantity,
+      });
+
+      return {
+        isEligible: false,
+        message: 'Not enough qualifying items purchased.',
+      };
+    } catch (error) {
+      console.error('❌ Error validating Buy X Get Y promotion', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        promotionId: promotion.promotion_id,
+      });
+
+      return {
+        isEligible: false,
+        message: 'Error validating promotion',
       };
     }
-
-    return { isEligible: false };
   }
   // aa function an help thi tame khali validate kari sako cho ke cart ma quantity discount eligible chhe ke nahi
   private async validateQuantityDiscount(
@@ -1598,22 +2121,50 @@ export class PromotionService implements IService, IPromotionsService {
       ...eligibleProductIds,
       ...categoryProducts.map((p) => p.product_id),
     ];
+    console.log('allEligibleProductIds');
+    console.log(allEligibleProductIds);
+    console.log('hello------>');
+    console.log(cartItems);
 
     const eligibleItems = cartItems.filter((item) =>
       allEligibleProductIds.includes(item.product_id),
     );
+
     const eligibleQuantity = eligibleItems.reduce((sum, item) => sum + item.quantity, 0);
+    console.log('eligibleQuantity');
+    console.log(eligibleQuantity);
+    console.log(eligibleQuantity >= promotion.buyQuantity);
 
     if (eligibleQuantity >= promotion.buyQuantity) {
       const discountPercentage = Math.min(
         10 + Math.floor(eligibleQuantity / promotion.buyQuantity) * 5,
         50,
       );
+      console.log(discountPercentage);
+      console.log('eligibleItems------>');
+      console.log(eligibleItems);
       const eligibleTotal = eligibleItems.reduce(
         (sum, item) => sum + item.price * item.quantity,
         0,
       );
+      console.log('eligibleTotal----->');
+      console.log(eligibleTotal);
       const discountAmount = (eligibleTotal * discountPercentage) / 100;
+      console.log('dicsounted amount is heree----->');
+      console.log(discountAmount);
+      console.log({
+        isEligible: true,
+        promotion_id: promotion.promotion_id,
+        type: PromotionType.QUANTITY_DISCOUNT,
+        discountAmount,
+        message: `Buy ${promotion.buyQuantity}+ items, get ${discountPercentage}% off!`,
+        details: {
+          eligibleQuantity,
+          discountPercentage,
+          eligibleTotal,
+          requiredQuantity: promotion.buyQuantity,
+        },
+      });
 
       return {
         isEligible: true,
@@ -1746,6 +2297,8 @@ export class PromotionService implements IService, IPromotionsService {
     cartItems: CartItem[],
   ): Promise<any> {
     const validation = await this.validateQuantityDiscount(promotion, cartItems);
+    console.log('calculateQuantityDiscountAmount validation');
+    console.log(validation);
     if (!validation.isEligible) return { discountAmount: 0 };
     return {
       discountAmount: validation.discountAmount,

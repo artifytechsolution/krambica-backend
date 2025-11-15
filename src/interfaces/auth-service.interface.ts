@@ -11,4 +11,6 @@ export interface IAuthService {
   Login(data: loginuserInput): Promise<User>;
   RefreshToken(RefreshToken: string): any;
   sendOtp(email: string): any;
+  createAddress(data: any): any;
+  AddressList(email: string): any;
 }

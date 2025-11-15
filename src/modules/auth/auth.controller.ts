@@ -54,6 +54,18 @@ export class AuthController {
       }
     }
   }
+  async createAddress(req: Request, res: Response, next: NextFunction) {
+    try {
+      const item = await this.authService.createAddress(req.body);
+      res.status(201).json(ResponseUtil.success(item, 'Auth created'));
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(
+          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+        );
+      }
+    }
+  }
   async Login(req: Request, res: Response, next: NextFunction) {
     try {
       console.log('hello controller is called');
@@ -110,6 +122,19 @@ export class AuthController {
     try {
       await this.authService.delete(req.params.id);
       res.status(201).json(ResponseUtil.success({}, 'user deleted successfully'));
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(
+          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+        );
+      }
+    }
+  }
+
+  async AddressList(req: Request, res: Response, next: NextFunction) {
+    try {
+      const address = await this.authService.AddressList(req.body);
+      res.status(201).json(ResponseUtil.success(address, 'user deleted successfully'));
     } catch (error) {
       if (error instanceof AppError) {
         next(

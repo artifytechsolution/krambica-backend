@@ -21,6 +21,7 @@ export const promotionRoutes = (controller: PromotionController): Router => {
     validateId,
     controller.addEligibleProducts.bind(controller),
   );
+  router.post('/ListEligibleProducts', controller.ListEligibleProducts.bind(controller));
   router.get(
     '/admin/:id/eligible-products',
     validateId,

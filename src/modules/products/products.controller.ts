@@ -85,7 +85,7 @@ export class ProductsController {
 
   async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await this.productsService.getAll();
+      const result = await this.productsService.getAll(req.body);
       res.json(ResponseUtil.success(result, 'Products list retrieved successfully'));
     } catch (error) {
       next(
@@ -571,18 +571,10 @@ export class ProductsController {
     try {
       const { user_id, product_id } = req.body;
       if (!user_id || !product_id) {
-        res.status(400).json({
-          success: false,
-          message: 'user_id and product_id are required',
-        });
-        return;
+        throw new InvalidInputError('user_id and product_id are required');
       }
       const result = await this.productsService.addToWishlist(user_id, product_id);
-      res.status(201).json({
-        success: true,
-        message: 'Item added to wishlist successfully',
-        data: result,
-      });
+      res.json(ResponseUtil.success(result, 'Item added to wishlist successfully'));
     } catch (error: any) {
       next(
         error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
@@ -619,17 +611,10 @@ export class ProductsController {
       const { wishlist_id } = req.params;
       const { user_id } = req.body;
       if (!user_id) {
-        res.status(400).json({
-          success: false,
-          message: 'user_id is required',
-        });
-        return;
+        throw new InvalidInputError('user_id and product_id are required');
       }
       await this.productsService.removeFromWishlist(wishlist_id, user_id);
-      res.status(200).json({
-        success: true,
-        message: 'Item removed from wishlist successfully',
-      });
+      res.json(ResponseUtil.success({}, 'Item added to wishlist successfully'));
     } catch (error: any) {
       if (error.message === 'Wishlist item not found') {
         res.status(404).json({
@@ -655,7 +640,9 @@ export class ProductsController {
 
   async getWishlistByUserId(req: Request, res: Response, next: NextFunction) {
     try {
+      console.log('helllo------>getWishlistByUserId');
       const { userId } = req.params;
+      console.log(userId);
       if (!userId) {
         throw new InvalidInputError('User ID is required');
       }

@@ -49,6 +49,7 @@ export interface IPromotionsService {
   // Analytics
   getPromotionStats(promotionId: string): Promise<PromotionStatsResponse>;
   getPromotionReport(queryParams?: any): Promise<any>;
+  ListEligibleProducts(queryParams: any): Promise<any>;
 
   // User Related
   checkUserEligibility(promotionId: string, userId: number): Promise<boolean>;

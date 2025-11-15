@@ -13,7 +13,8 @@ interface UploadMultipleImagesData {
 
 export interface IProductsService {
   // Basic CRUD
-  getAll(): Promise<any>;
+  getAll(data: any): Promise<any>;
+
   getById(id: string): Promise<any>;
   create(data: any): Promise<any>;
   update(id: string, data: any): Promise<any>;

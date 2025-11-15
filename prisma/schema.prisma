@@ -316,6 +316,7 @@ model ProductColorImage {
   product_color_id Int
   url              String
   altText          String?
+  type            String?
   isPrimary        Boolean  @default(false)
   displayOrder     Int      @default(0)
   createdAt        DateTime @default(now())
@@ -361,6 +362,7 @@ model ProductImage {
   product_id Int
   url        String
   altText    String?
+  type       String?
   isPrimary  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -573,6 +575,7 @@ model OrderItem {
   total               Float
   stockReservedAt     DateTime?
   stockDeductedAt     DateTime?
+  isFree              Boolean?
 
   order       Order               @relation(fields: [order_id], references: [order_id], onDelete: Cascade)
   sizeVariant ProductSizeVariant? @relation(fields: [product_size_var_id], references: [product_size_var_id], onDelete: SetNull)

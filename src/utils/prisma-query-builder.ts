@@ -2,7 +2,7 @@ export function buildPrismaQuery(
   filters: any[],
   allowedFields: Record<
     string,
-    'string' | 'datetime' | 'uuid' | 'array' | 'enum' | 'boolean' | 'datetimets' | 'int' | 'float'
+    'string' | 'boolean' | 'float' | 'datetime' | 'uuid' | 'array' | 'enum' | 'datetimets' | 'int'
   >,
   page: number = 1,
   limit: number,
