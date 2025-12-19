@@ -21,6 +21,6 @@ export class ModuleNotFoundError extends AppError {
 
 export class InvalidInputError extends AppError {
   constructor(message: string, errorDetails?: string) {
-    super(401, message, errorDetails || 'InvalidInputError');
+    super(400, message, errorDetails || 'InvalidInputError');
   }
 }

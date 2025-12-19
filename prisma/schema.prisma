@@ -281,6 +281,7 @@ model Product {
   eligibleForPromotions PromotionEligibleProduct[] @relation("EligibleProducts")
   availableAsFree       PromotionFreeProduct[]     @relation("FreeProducts")
   selectedAsFree        PromotionFreeItem[]        @relation("SelectedFreeProducts")
+  ratingSummary    RatingSummary?
 
   @@index([category_id])
   @@index([gender])
@@ -421,23 +422,58 @@ model ProductDiscount {
 }
 
 model ProductReview {
-  id                String       @unique @default(uuid())
-  product_review_id Int          @id @default(autoincrement())
+  id                String        @unique @default(uuid())
+  product_review_id Int           @id @default(autoincrement())
   product_id        Int
   user_id           Int
   rating            Int
-  reviewText        String
-  status            ReviewStatus @default(PENDING)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  reviewText        String?       // Make optional
+  status            ReviewStatus  @default(PENDING)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  product Product @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
-  user    User    @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  product           Product       @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+  user              User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  media             ReviewMedia[] // Add this relation
 
   @@index([product_id])
   @@index([user_id])
   @@index([status])
   @@index([rating])
+}
+
+// NEW: Review Media
+model ReviewMedia {
+  id                 String         @unique @default(uuid())
+  review_media_id    Int            @id @default(autoincrement())
+  product_review_id  Int
+  url                String
+  type               String         // "image" or "video"
+  createdAt          DateTime       @default(now())
+
+  review             ProductReview  @relation(fields: [product_review_id], references: [product_review_id], onDelete: Cascade)
+
+  @@index([product_review_id])
+}
+
+// NEW: Rating Summary (Optional but recommended)
+model RatingSummary {
+  id            String   @unique @default(uuid())
+  summary_id    Int      @id @default(autoincrement())
+  product_id    Int      @unique
+  avgRating     Float    @default(0)
+  totalReviews  Int      @default(0)
+  count1        Int      @default(0)
+  count2        Int      @default(0)
+  count3        Int      @default(0)
+  count4        Int      @default(0)
+  count5        Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product       Product  @relation(fields: [product_id], references: [product_id], onDelete: Cascade)
+
+  @@index([product_id])
 }
 
 model Wishlist {

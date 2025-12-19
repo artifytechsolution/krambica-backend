@@ -689,6 +689,9 @@ export class OrdersService implements IService, IOrdersService {
           skip,
           take,
           orderBy,
+          include: {
+            shippingAddress: true,
+          },
         }),
         this.db.client.order.count({ where }),
       ]);

@@ -358,9 +358,16 @@ export class AuthService implements IService, IAuthService {
   }
 
   async update(id: string, data: any): Promise<any> {
+    console.log('main id is here for update');
+    console.log(id);
     const user = await this.db.client.user.findUnique({
       where: { id: id, deletedAt: null },
     });
+    console.log(id);
+    console.log('data is comming for update');
+    console.log(data);
+    console.log('user is comming for update');
+    console.log(user);
 
     if (!user) {
       throw new InvalidInputError('User not found');
