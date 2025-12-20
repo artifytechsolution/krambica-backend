@@ -577,6 +577,8 @@ model Order {
   shippingCost   Float?         @default(0)
   grandTotal     Float?
   status         OrderStatus    @default(PENDING)
+  paymentId      String?
+  razorpayOrderId String?
   paymentStatus  PaymentStatus  @default(UNPAID)
   paymentMethod  PaymentMethod?
   shippingMethod ShippingMethod?

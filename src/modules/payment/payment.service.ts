@@ -17,10 +17,11 @@ import {
 } from './payment.types';
 import { InvalidInputError, AppError } from '../../utils/error.utils';
 import { IConfigService } from '../../services/config.service';
+import { IDatabaseService } from '../../interfaces/database-service.interface';
 
 @injectable()
 export class PaymentService implements IService, IPaymentService {
-  static dependencies = ['ConfigService'];
+  static dependencies = ['ConfigService', 'DatabaseService'];
   static optionalDependencies: string[] = [];
 
   private config: IConfigService;
@@ -28,11 +29,11 @@ export class PaymentService implements IService, IPaymentService {
   private keyId: string;
   private keySecret: string;
   private webhookSecret: string;
+  private db: IDatabaseService;
 
-  constructor(config: IConfigService) {
+  constructor(config: IConfigService, db: IDatabaseService) {
     this.config = config;
-
-    console.log('PaymentService instantiated');
+    this.db = db;
 
     // Load credentials from config
     this.keyId = this.config.get('RAZORPAY_KEY_ID') as string;
@@ -410,6 +411,14 @@ export class PaymentService implements IService, IPaymentService {
       method: payment.method,
       order_id: payment.order_id,
     });
+    await this.db.client.order.updateMany({
+      where: {
+        razorpayOrderId: payment.order_id,
+      },
+      data: {
+        paymentId: payment.id,
+      },
+    });
   }
 
   private async handlePaymentFailed(event: WebhookEvent): Promise<void> {
@@ -425,6 +434,16 @@ export class PaymentService implements IService, IPaymentService {
       error_code: payment.error_code,
       error_description: payment.error_description,
       order_id: payment.order_id,
+    });
+
+    await this.db.client.order.updateMany({
+      where: {
+        razorpayOrderId: payment.order_id,
+      },
+      data: {
+        paymentId: payment.id,
+        paymentStatus: 'FAILED',
+      },
     });
   }
 
@@ -455,6 +474,19 @@ export class PaymentService implements IService, IPaymentService {
       razorpay_order_id: order.id,
       amount: order.amount / 100,
       status: order.status,
+    });
+    //    UNPAID;
+    // PAID;
+    // FAILED;
+    // REFUNDED;
+    await this.db.client.order.updateMany({
+      where: {
+        razorpayOrderId: order.id,
+      },
+      data: {
+        status: order.status == 'paid' ? 'CONFIRMED' : 'PENDING',
+        paymentStatus: order.status == 'paid' ? 'PAID' : null,
+      },
     });
   }
 

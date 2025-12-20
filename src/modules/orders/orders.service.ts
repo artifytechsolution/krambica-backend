@@ -77,9 +77,9 @@ export class OrdersService implements IService, IOrdersService {
 
   // Configuration
   private readonly CONFIG = {
-    TAX_RATE: 0.18,
+    TAX_RATE: 0,
     FREE_SHIPPING_THRESHOLD: 500,
-    SHIPPING_COST: 50,
+    SHIPPING_COST: 0,
     ESTIMATED_DELIVERY_DAYS: 5,
     LOW_STOCK_THRESHOLD: 10,
   };
@@ -154,8 +154,9 @@ export class OrdersService implements IService, IOrdersService {
     grandTotal: number;
   } {
     const subtotal = totalAmount - discount;
-    const tax = Math.round(subtotal * 0.05); // 5% tax
-    const shippingCost = subtotal > 1000 ? 0 : 50; // Free shipping above ₹1000
+    const tax = 0; // here implement text
+    // const shippingCost = subtotal > 1000 ? 0 : 50; // Free shipping above ₹1000
+    const shippingCost = 0;
     const grandTotal = subtotal + tax + shippingCost;
 
     return {
@@ -691,6 +692,21 @@ export class OrdersService implements IService, IOrdersService {
           orderBy,
           include: {
             shippingAddress: true,
+            items: {
+              include: {
+                sizeVariant: {
+                  include: {
+                    productColor: {
+                      include: {
+                        images: {
+                          take: 1,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         }),
         this.db.client.order.count({ where }),
@@ -1348,6 +1364,7 @@ export class OrdersService implements IService, IOrdersService {
             user_id: user.user_id,
             address_id: address.address_id,
             totalAmount: totals.totalAmount,
+            razorpayOrderId: razorpayOrder.id,
             discount,
             tax: totals.tax || 0,
             shippingCost: totals.shippingCost || 0,
