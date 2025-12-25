@@ -13,7 +13,7 @@ export const promotionRoutes = (controller: PromotionController): Router => {
   router.get('/admin/:id', validateId, controller.getPromotionById.bind(controller));
   router.put('/admin/:id', validateId, controller.updatePromotion.bind(controller));
   router.patch('/admin/:id/status', validateId, controller.updatePromotionStatus.bind(controller));
-  router.delete('/admin/:id', validateId, controller.deletePromotion.bind(controller));
+  router.delete('/admin/:id', controller.deletePromotion.bind(controller));
 
   // Admin - Eligible Products
   router.post(
@@ -29,7 +29,6 @@ export const promotionRoutes = (controller: PromotionController): Router => {
   );
   router.delete(
     '/admin/:id/eligible-products/:productId',
-    validateId,
     controller.removeEligibleProduct.bind(controller),
   );
 

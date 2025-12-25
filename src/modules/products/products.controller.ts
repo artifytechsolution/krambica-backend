@@ -150,6 +150,8 @@ export class ProductsController {
   async getAllColors(req: Request, res: Response, next: NextFunction) {
     try {
       const { productId } = req.params;
+      console.log('product id is comminggggg');
+      console.log(productId);
       // if (!productId || isNaN(parseInt(productId))) {
       //   throw new InvalidInputError('Valid Product ID is required');
       // }
@@ -166,9 +168,6 @@ export class ProductsController {
 
   async createColor(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.body || Object.keys(req.body).length === 0) {
-        throw new InvalidInputError('Product color data is required');
-      }
       const item = await this.productsService.createColor(req.body);
       res.status(201).json(ResponseUtil.success(item, 'Product color created successfully'));
     } catch (error) {
@@ -314,9 +313,6 @@ export class ProductsController {
 
   async createSizeVariant(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.body || Object.keys(req.body).length === 0) {
-        throw new InvalidInputError('Size variant data is required');
-      }
       const item = await this.productsService.createSizeVariant(req.body);
       res.status(201).json(ResponseUtil.success(item, 'Size variant created successfully'));
     } catch (error) {
@@ -437,10 +433,17 @@ export class ProductsController {
   async setPrimaryProductImage(req: Request, res: Response, next: NextFunction) {
     try {
       const { imageId } = req.params;
-      if (!imageId) {
-        throw new InvalidInputError('Valid Image ID is required');
-      }
-      const result = await this.productsService.setPrimaryProductImage(parseInt(imageId));
+      console.log('setPrimaryProductImage imageId----->', imageId);
+      let data = {
+        imageId: parseInt(imageId),
+        isPrimary: req.body.isPrimary,
+      };
+      console.log('Request body:', {
+        imageId: parseInt(imageId),
+        isPrimary: req.body.isPrimary,
+      });
+
+      const result = await this.productsService.setPrimaryProductImage(data);
       res.json(ResponseUtil.success(result, 'Primary image updated successfully'));
     } catch (error) {
       next(

@@ -42,8 +42,11 @@ export class CategoriesController {
 
   async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const item = await this.categoriesService.create(req.body);
-      res.status(201).json(ResponseUtil.success(item, 'Categories created'));
+      const category = await this.categoriesService.create(
+        req.body,
+        req.files as Express.Multer.File[],
+      );
+      res.status(201).json(ResponseUtil.success(category, 'Categories created'));
     } catch (error: any) {
       if (error instanceof AppError) {
         next(
@@ -78,4 +81,24 @@ export class CategoriesController {
       }
     }
   }
+  // async uploadCategoryMedia(req: Request, res: Response, next: NextFunction) {
+  //   try {
+  //     const { id } = req.body;
+  //     console.log('review_id', id);
+  //     const files = req.files as Express.Multer.File[];
+
+  //     const result = await this.categoriesService.uploadCategoryMedia({
+  //       id: id,
+  //       files,
+  //     });
+  //     res.json(ResponseUtil.success(result, 'Review media uploaded successfully'));
+  //   } catch (error: any) {
+  //     this.logger.error('Error uploading review media:');
+  //     if (error instanceof AppError) {
+  //       next(error);
+  //     } else {
+  //       next(new InvalidInputError('An unexpected error occurred during media upload'));
+  //     }
+  //   }
+  // }
 }

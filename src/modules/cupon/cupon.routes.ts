@@ -7,12 +7,14 @@ export const cuponRoutes = (controller: CuponController): Router => {
   const router = Router();
 
   // Basic CRUD Operations
-  router.post('/', AuthMiddleware('access'), controller.create.bind(controller));
+  // router.post('/', AuthMiddleware('access'), controller.create.bind(controller));
+  router.post('/list', controller.getAll.bind(controller));
+  router.post('/', controller.create.bind(controller));
   // router.get('/', controller.getAll.bind(controller));
   router.get('/:id', controller.getById.bind(controller));
   router.get('/code/:code', controller.getByCode.bind(controller));
   router.put('/:id', validateId, AuthMiddleware('access'), controller.update.bind(controller));
-  router.delete('/:id', validateId, AuthMiddleware('access'), controller.delete.bind(controller));
+  router.delete('/:id', controller.delete.bind(controller));
 
   // Validation & Redemption Operations
   router.post('/:code/validate', controller.validate.bind(controller));

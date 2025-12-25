@@ -88,6 +88,8 @@ export class ProductsService implements IService, IProductsService {
   //   }
   // }
   async getAll(data?: any): Promise<any> {
+    console.log('product is comminggg-----<');
+    console.log(data);
     try {
       const allowedFields = {
         // ========== Direct Product Fields ==========
@@ -235,6 +237,8 @@ export class ProductsService implements IService, IProductsService {
           },
         },
       });
+      console.log('product in service by id---');
+      console.log(product);
 
       return product;
     } catch (error: any) {
@@ -338,7 +342,7 @@ export class ProductsService implements IService, IProductsService {
       }
 
       const colors = await this.db.client.productColor.findMany({
-        where: { product_id: product.data.product_id },
+        where: { product_id: product.product_id },
         include: {
           images: { where: { isPrimary: true }, take: 1 },
           sizeVariants: true,
@@ -349,25 +353,34 @@ export class ProductsService implements IService, IProductsService {
       throw new InvalidInputError(error.message);
     }
   }
-
-  async createColor(data: any): Promise<any> {
+  async createColor(data: any[]): Promise<any> {
     try {
-      const product: any = await this.getById(data.product_id);
-      console.log('product.data.product_id is here');
-      console.log(product);
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new InvalidInputError('Data must be a non-empty array');
+      }
+
+      const product = await this.getById(data[0].product_id);
       if (!product) {
         throw new InvalidInputError('Product does not exist');
       }
-      const color = await this.db.client.productColor.create({
-        data: {
-          product_id: product.product_id,
-          color_name: data.color_name,
-          color_code: data.color_code,
-          isAvailable: data.isAvailable ?? true,
-          displayOrder: data.displayOrder ?? 0,
-        },
-      });
-      return { success: true, data: color };
+
+      const createdColors = [];
+
+      for (const item of data) {
+        const createdColor = await this.db.client.productColor.create({
+          data: {
+            product_id: product.product_id,
+            color_name: item.color_name,
+            color_code: item.color_code,
+            isAvailable: item.isAvailable ?? true,
+            displayOrder: item.displayOrder ?? 0,
+          },
+        });
+
+        createdColors.push(createdColor);
+      }
+
+      return { success: true, data: createdColors };
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
@@ -680,36 +693,44 @@ export class ProductsService implements IService, IProductsService {
     }
   }
 
-  async createSizeVariant(data: any): Promise<any> {
+  async createSizeVariant(data: any[]): Promise<any> {
     try {
-      console.log('data is here----->');
-      console.log(data);
-      const color: any = await this.db.client.productColor.findUnique({
-        where: { id: data.product_color_id },
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new InvalidInputError('Data must be a non-empty array');
+      }
+
+      // Validate color once
+      const color = await this.db.client.productColor.findUnique({
+        where: { id: data[0].product_color_id },
       });
-      console.log('color is commingggg----->');
-      console.log(typeof color.product_color_id);
+
       if (!color) {
         throw new InvalidInputError('Product color does not exist');
       }
 
-      const variant = await this.db.client.productSizeVariant.create({
-        data: {
-          product_color_id: color.product_color_id,
-          size: data.size,
-          sku: data.sku,
-          price: data.price,
-          stock: data.stock || 0,
-          availableStock: data.stock || 0,
-          lowStockThreshold: data.lowStockThreshold || 5,
-          isAvailable: data.isAvailable ?? true,
-        },
-      });
+      const createdVariants = [];
 
-      // Update color total stock
+      for (const item of data) {
+        const variant = await this.db.client.productSizeVariant.create({
+          data: {
+            product_color_id: color.product_color_id,
+            size: item.size,
+            sku: item.sku,
+            price: item.price,
+            stock: item.stock || 0,
+            availableStock: item.stock || 0,
+            lowStockThreshold: item.lowStockThreshold || 5,
+            isAvailable: item.isAvailable ?? true,
+          },
+        });
+
+        createdVariants.push(variant);
+      }
+
+      // Update color total stock ONCE
       await this.updateColorTotalStock(color.product_color_id);
 
-      return { success: true, data: variant };
+      return { success: true, data: createdVariants };
     } catch (error: any) {
       throw new InvalidInputError(error.message);
     }
@@ -894,23 +915,27 @@ export class ProductsService implements IService, IProductsService {
     }
   }
 
-  async setPrimaryProductImage(imageId: number) {
+  async setPrimaryProductImage(data: any) {
     try {
-      const image = await this.db.client.productImage.findUnique({
-        where: { id: imageId },
+      console.log('image id is here---');
+      console.log(data);
+      const image = await this.db.client.ProductColorImage.findUnique({
+        where: { id: data.imageId },
       });
+      console.log('image is found---');
+      console.log(image);
       if (!image) {
         throw new Error('Image not found in database');
       }
 
       await this.db.client.$transaction(async (tx: any) => {
-        await tx.productImage.updateMany({
-          where: { product_id: image.product_id },
-          data: { isPrimary: false },
-        });
-        await tx.productImage.update({
-          where: { id: imageId },
-          data: { isPrimary: true },
+        // await tx.ProductColorImage.updateMany({
+        //   where: { id: image.product_id },
+        //   data: { isPrimary: false },
+        // });
+        await tx.ProductColorImage.update({
+          where: { id: data.imageId },
+          data: { isPrimary: data.isPrimary },
         });
       });
 
@@ -954,14 +979,22 @@ export class ProductsService implements IService, IProductsService {
       throw new InvalidInputError(error.message);
     }
   }
-
-  async updateStock(variantId: string, newStock: number): Promise<any> {
+  async updateStock(
+    variantId: string,
+    stockDelta: number, // +10 for increase, -5 for decrease
+  ): Promise<any> {
     try {
       const variant = await this.db.client.productSizeVariant.findUnique({
         where: { id: variantId },
       });
+
       if (!variant) {
         throw new InvalidInputError('Size variant not found');
+      }
+
+      const newStock = variant.stock + stockDelta;
+      if (newStock < 0) {
+        throw new InvalidInputError('Stock cannot be negative');
       }
 
       const updatedVariant = await this.db.client.productSizeVariant.update({
@@ -973,23 +1006,24 @@ export class ProductsService implements IService, IProductsService {
         },
       });
 
-      // Log the stock change
       await this.db.client.sizeVariantInventoryLog.create({
         data: {
           product_size_var_id: variant.product_size_var_id,
           changeType: 'MANUAL_ADJUSTMENT',
-          quantityChanged: newStock - variant.stock,
+          quantityChanged: stockDelta, // can be + or -
           stockBeforeChange: variant.stock,
           stockAfterChange: newStock,
           reservedStockBefore: variant.reservedStock,
           reservedStockAfter: variant.reservedStock,
           referenceType: 'MANUAL',
           referenceId: `STOCK_UPDATE_${Date.now()}`,
-          remarks: 'Manual stock update',
+          remarks:
+            stockDelta > 0
+              ? `Increase stock by ${stockDelta}`
+              : `Decrease stock by ${Math.abs(stockDelta)}`,
         },
       });
 
-      // Update color total stock
       await this.updateColorTotalStock(variant.product_color_id);
 
       return { success: true, data: updatedVariant };

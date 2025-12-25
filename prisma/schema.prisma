@@ -238,6 +238,7 @@ model Category {
   id          String    @unique @default(uuid())
   category_id Int       @id @default(autoincrement())
   name        String
+  cat_img     String?
   slug        String?   @unique
   description String?
   createdAt   DateTime  @default(now())

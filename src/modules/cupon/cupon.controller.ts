@@ -63,6 +63,19 @@ export class CuponController {
     }
   }
 
+  async getAll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const coupon = await this.cuponService.getAll(req.body);
+      res.json(ResponseUtil.success(coupon, 'Coupon found'));
+    } catch (error) {
+      if (error instanceof AppError) {
+        next(
+          error instanceof AppError ? error : new InvalidInputError('An unexpected error occurred'),
+        );
+      }
+    }
+  }
+
   // 4. Get coupon by code
   async getByCode(req: Request, res: Response, next: NextFunction) {
     try {

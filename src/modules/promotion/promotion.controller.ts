@@ -125,10 +125,7 @@ export class PromotionController {
 
   async removeEligibleProduct(req: Request, res: Response, next: NextFunction) {
     try {
-      await this.promotionsService.removeEligibleProduct(
-        req.params.id,
-        parseInt(req.params.productId),
-      );
+      await this.promotionsService.removeEligibleProduct(req.params.id, req.params.productId);
       res.json(ResponseUtil.success(null, 'Eligible product removed successfully'));
     } catch (error) {
       next(

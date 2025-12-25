@@ -6,7 +6,7 @@ export const ordersRoutes = (controller: OrdersController): Router => {
   const router = Router();
 
   // CRUD (5)
-  router.get('/', controller.getAll.bind(controller));
+  router.post('/', controller.getAll.bind(controller));
   router.get('/:id', validateId, controller.getById.bind(controller));
   router.post('/', controller.create.bind(controller));
   router.put('/:id', validateId, controller.update.bind(controller));
@@ -19,7 +19,7 @@ export const ordersRoutes = (controller: OrdersController): Router => {
   router.patch('/:id/cancel', validateId, controller.cancelOrder.bind(controller));
 
   // User Operations (3)
-  router.get('/users/:userId/orders', controller.getUserOrders.bind(controller));
+  router.post('/users/:userId/orders', controller.getUserOrders.bind(controller));
   router.get('/users/:userId/active', controller.getActiveOrders.bind(controller));
   router.get('/users/:userId/orders/:orderId/track', controller.trackOrder.bind(controller));
 

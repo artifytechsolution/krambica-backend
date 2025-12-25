@@ -7,6 +7,7 @@ import { InvalidInputError } from '../../utils/error.utils';
 import { DatabaseService } from '../database/database.service';
 import { ConfigService } from '../../services/config.service';
 import { PrismaOperationType, executePrismaOperation } from '../../utils/prisma.utils';
+import cloudinary from '../../config/cloudinary.config';
 
 @injectable()
 export class CategoriesService implements IService, ICategoriesService {
@@ -25,6 +26,9 @@ export class CategoriesService implements IService, ICategoriesService {
     this.logger.info('UnitsService instantiated');
     this.db = db;
     this.config = config;
+  }
+  uploadCategoryMedia(uploadData: any): Promise<void> {
+    throw new Error('Method not implemented.');
   }
 
   async initialize() {
@@ -66,22 +70,65 @@ export class CategoriesService implements IService, ICategoriesService {
     }
   }
 
-  async create(data: any): Promise<any> {
+  // async create(data: any): Promise<any> {
+  //   try {
+  //     const category = executePrismaOperation(
+  //       'Category',
+  //       {
+  //         operation: PrismaOperationType.CREATE,
+  //         data: {
+  //           ...data,
+  //         },
+  //       },
+  //       this.db.client,
+  //       this.logger,
+  //     );
+  //     return category;
+  //   } catch (error: any) {
+  //     throw new InvalidInputError(error.message);
+  //   }
+  // }
+  async create(data: any, files?: Express.Multer.File[]): Promise<any> {
     try {
-      const category = executePrismaOperation(
+      let imageUrl: string | null = null;
+
+      // 1️⃣ Upload image (optional)
+      if (files && files.length > 0) {
+        const file = files[0]; // only ONE category image
+
+        const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+          folder: 'category_images',
+          public_id: `category_${Date.now()}`,
+          resource_type: 'image',
+          transformation: [
+            { width: 1200, height: 1200, crop: 'limit' },
+            { quality: 'auto' },
+            { format: 'auto' },
+          ],
+        });
+
+        imageUrl = cloudinaryResult.secure_url;
+      }
+
+      // 2️⃣ Create category with image URL
+      const category = await executePrismaOperation(
         'Category',
         {
           operation: PrismaOperationType.CREATE,
           data: {
-            ...data,
+            name: data.name,
+            slug: data.slug,
+            description: data.description,
+            cat_img: imageUrl,
           },
         },
         this.db.client,
         this.logger,
       );
+
       return category;
     } catch (error: any) {
-      throw new InvalidInputError(error.message);
+      throw new InvalidInputError(error.message || 'Failed to create category');
     }
   }
 
@@ -121,4 +168,57 @@ export class CategoriesService implements IService, ICategoriesService {
       throw new InvalidInputError(error.message);
     }
   }
+  // async uploadCategoryMedia(uploadData: any) {
+  //   const { id, files } = uploadData;
+
+  //   console.log('category id', id);
+  //   const category = await this.db.client.category.findUnique({
+  //     where: { id: id },
+  //   });
+  //   console.log('review', category);
+  //   if (!category) {
+  //     throw new InvalidInputError(`category is not exist with id ${id}`);
+  //   }
+
+  //   if (!files || !files.length) {
+  //     throw new InvalidInputError('No files uploaded');
+  //   }
+
+  //   const uploadedMedia = [];
+
+  //   for (const file of files) {
+  //     try {
+  //       // 2️⃣ Upload to Cloudinary (auto detects type)
+  //       const cloudinaryResult = await cloudinary.uploader.upload(file.path, {
+  //         folder: 'review_media',
+  //         public_id: `review_${id}_${Date.now()}`,
+  //         resource_type: 'auto',
+  //         transformation: [
+  //           { width: 1200, height: 1200, crop: 'limit' },
+  //           { quality: 'auto' },
+  //           { format: 'auto' },
+  //         ],
+  //       });
+
+  //       // 3️⃣ Save record in DB
+  //       const record = await this.db.client.category.update({
+  //         where: { id: id },
+  //         data: {
+  //           cat_img: cloudinaryResult.secure_url,
+  //         },
+  //       });
+
+  //       uploadedMedia.push(record);
+  //     } catch (err) {
+  //       console.error('Cloudinary upload failed:', err);
+  //       throw new InvalidInputError('Media upload failed');
+  //     }
+  //   }
+
+  //   return {
+  //     success: true,
+  //     message: 'Media uploaded successfully',
+  //     data: uploadedMedia,
+  //   };
+  // }
 }

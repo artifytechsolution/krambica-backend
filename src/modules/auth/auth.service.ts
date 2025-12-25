@@ -251,6 +251,9 @@ export class AuthService implements IService, IAuthService {
             profile: true,
             addresses: true,
           },
+          where: {
+            deletedAt: null,
+          },
         },
         this.db.client,
         this.logger,

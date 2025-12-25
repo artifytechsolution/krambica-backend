@@ -29,7 +29,7 @@ export interface IPromotionsService {
   // Eligible Products Management
   addEligibleProducts(promotionId: string, data: AddEligibleProductDTO[]): Promise<any>;
   getEligibleProducts(promotionId: string, queryParams?: any): Promise<any>;
-  removeEligibleProduct(promotionId: string, productId: number): Promise<boolean>;
+  removeEligibleProduct(promotionId: string, productId: string): Promise<boolean>;
 
   // Free Products Management
   addFreeProducts(promotionId: string, data: AddFreeProductDTO[]): Promise<any>;

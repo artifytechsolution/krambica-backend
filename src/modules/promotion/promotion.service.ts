@@ -782,11 +782,12 @@ export class PromotionService implements IService, IPromotionsService {
     }
   }
 
-  async removeEligibleProduct(promotionId: string, productId: number): Promise<boolean> {
+  async removeEligibleProduct(promotionId: string, productId: string): Promise<boolean> {
     try {
+      console.log('promotionId and productId:', promotionId, productId);
       const item = await this.getPromotionById(promotionId);
       if (!item) throw new InvalidInputError('Promotion not found');
-      const product = await this.productService.getById(promotionId);
+      const product = await this.productService.getById(productId);
       if (!product) throw new InvalidInputError('product not found');
       const eligibleProduct = await this.db.client.promotionEligibleProduct.findFirst({
         where: {
@@ -882,9 +883,9 @@ export class PromotionService implements IService, IPromotionsService {
 
   async getFreeProducts(promotionId: string, queryParams?: any): Promise<any> {
     try {
-      const item = await this.db.client.PromotionFreeProduct.findFirst({
+      const item = await this.db.client.promotion.findFirst({
         where: {
-          promotion_id: parseInt(promotionId),
+          id: promotionId,
         },
       });
       console.log('promotion is herere------>');

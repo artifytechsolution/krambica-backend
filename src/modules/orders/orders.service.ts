@@ -638,9 +638,14 @@ export class OrdersService implements IService, IOrdersService {
   }
 
   // GET ALL
-  async getAll(queryParams: any): Promise<any> {
+  async getAll(data?: any): Promise<any> {
+    console.log('order is comminggg-----<');
+    console.log(data);
+
     try {
-      const allowedFields: Record<string, 'string' | 'int' | 'float' | 'enum' | 'datetime'> = {
+      const allowedFields = {
+        // ========== Direct Order Fields ==========
+        id: 'uuid',
         order_id: 'int',
         user_id: 'int',
         status: 'enum',
@@ -657,40 +662,79 @@ export class OrdersService implements IService, IOrdersService {
         cancelledAt: 'datetime',
         createdAt: 'datetime',
         updatedAt: 'datetime',
+
+        // ========== User Relations ==========
+        'user.id': 'uuid',
+        'user.user_id': 'int',
         'user.name': 'string',
         'user.email': 'string',
         'user.phone': 'string',
+
+        // ========== Shipping Address Relations ==========
+        'shippingAddress.id': 'uuid',
         'shippingAddress.fullName': 'string',
+        'shippingAddress.addressLine1': 'string',
+        'shippingAddress.addressLine2': 'string',
         'shippingAddress.city': 'string',
         'shippingAddress.state': 'string',
         'shippingAddress.zipCode': 'string',
-      };
+        'shippingAddress.country': 'string',
+      } as const;
 
-      const combineSearchGroups: string[][] = [
-        ['user.name', 'shippingAddress.city'],
-        ['user.email', 'user.phone'],
+      // Handle both body and query params format
+      let filters = [];
+      let page = 1;
+      let limit = 10;
+      let globalSearch = '';
+
+      if (data) {
+        if (data.filters && Array.isArray(data.filters)) {
+          // Body format
+          filters = data.filters;
+          page = data.page || 1;
+          limit = data.limit || 10;
+          globalSearch = data.globalSearch || '';
+        } else {
+          // Query params format
+          const parsed = parseQueryParams(data);
+          filters = parsed.filters;
+          page = parsed.page;
+          limit = parsed.limit;
+          globalSearch = parsed.globalSearch || '';
+        }
+      }
+
+      const combineFieldsGroups = [
+        ['user.name', 'user.email', 'user.phone'],
+        ['shippingAddress.fullName', 'shippingAddress.city', 'shippingAddress.state'],
       ];
 
-      const { filters, page, limit, globalSearch } = parseQueryParams(queryParams);
-
+      // Build dynamic filters
       const { where, orderBy, skip, take } = buildPrismaQuery(
         filters,
         allowedFields,
         page,
         limit,
         globalSearch,
-        combineSearchGroups,
+        combineFieldsGroups,
       );
 
-      console.log('🔍 Fetching orders', { page, limit, globalSearch });
-
-      const [orders, total] = await Promise.all([
+      // Execute queries
+      const [orders, totalCount] = await Promise.all([
         this.db.client.order.findMany({
           where,
+          orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }],
           skip,
           take,
-          orderBy,
           include: {
+            user: {
+              select: {
+                user_id: true,
+                name: true,
+                email: true,
+                phone: true,
+              },
+            },
             shippingAddress: true,
             items: {
               include: {
@@ -698,8 +742,18 @@ export class OrdersService implements IService, IOrdersService {
                   include: {
                     productColor: {
                       include: {
+                        product: {
+                          select: {
+                            product_id: true,
+                            name: true,
+                            slug: true,
+                          },
+                        },
                         images: {
                           take: 1,
+                          orderBy: {
+                            displayOrder: 'asc',
+                          },
                         },
                       },
                     },
@@ -712,26 +766,23 @@ export class OrdersService implements IService, IOrdersService {
         this.db.client.order.count({ where }),
       ]);
 
-      console.log(`✅ Retrieved ${orders.length} orders out of ${total} total`);
+      // Return with pagination metadata
+      const totalPages = Math.ceil(totalCount / take);
 
       return {
-        data: orders as any,
-        meta: {
-          total,
+        success: true,
+        data: orders,
+        pagination: {
+          total: totalCount,
           page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-          hasNextPage: page * limit < total,
-          hasPrevPage: page > 1,
-        },
-        filters: {
-          applied: filters,
-          search: globalSearch,
+          limit: take,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
         },
       };
     } catch (error: any) {
-      console.error('❌ Error fetching orders', { error: error.message });
-      throw new Error(error.message);
+      throw new InvalidInputError(error.message);
     }
   }
 

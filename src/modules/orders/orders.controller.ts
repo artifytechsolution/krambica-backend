@@ -15,7 +15,7 @@ export class OrdersController {
   }
 
   async getAll(req: Request, res: Response) {
-    const result = await this.ordersService.getAll(req.query);
+    const result = await this.ordersService.getAll(req.body);
     res.json(ResponseUtil.success(result, 'Orders retrieved'));
   }
 
@@ -64,7 +64,7 @@ export class OrdersController {
   }
 
   async getUserOrders(req: Request, res: Response) {
-    const query = { ...req.query, user_id: parseInt(req.params.userId) };
+    const query = { ...req.body, user_id: parseInt(req.params.userId) };
     const result = await this.ordersService.getAll(query);
     res.json(ResponseUtil.success(result, 'User orders retrieved'));
   }

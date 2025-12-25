@@ -2102,3 +2102,127 @@
 {"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:03:24.571Z"}
 {"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:03:24.953Z"}
 {"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:03:25.209Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T18:50:16.990Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T18:50:17.404Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T18:50:18.539Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:55:28.926Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:55:28.943Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:55:29.336Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:59:01.719Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:59:04.374Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T18:59:04.377Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T19:44:28.391Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T19:44:28.443Z"}
+{"level":"error","message":"Error occurred: Missing webhook signature","timestamp":"2025-12-20T19:44:30.042Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T19:49:29.466Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T19:49:29.707Z"}
+{"level":"error","message":"Error occurred: Invalid webhook signature","timestamp":"2025-12-20T19:49:30.429Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:166:32\n\n  163 \n  164 // Execute queries\n  165 const [products, totalCount] = await Promise.all([\n→ 166   this.db.client.product.findMany(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-21T13:36:55.906Z"}
+{"level":"error","message":"Error occurred: Invalid ID: must be a UUID string or numeric product_id","timestamp":"2025-12-21T14:22:49.103Z"}
+{"level":"error","message":"Error occurred: Invalid ID: must be a UUID string or numeric product_id","timestamp":"2025-12-21T14:23:12.890Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.productSizeVariant.create()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:710:65\n\n  707 const createdVariants = [];\n  708 \n  709 for (const item of data) {\n→ 710   const variant = await this.db.client.productSizeVariant.create({\n          data: {\n            product_color_id: \"ccf437e1-c497-497d-9975-0bbaeca4f72b\",\n                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n            size: \"XXL\",\n            sku: \"SHIRT-BLUE11-XXL1\",\n            price: 1500,\n            stock: 100,\n            availableStock: 100,\n            lowStockThreshold: 10,\n            isAvailable: true\n          }\n        })\n\nArgument `product_color_id`: Invalid value provided. Expected Int, provided String.","timestamp":"2025-12-21T14:40:47.734Z"}
+{"level":"error","message":"Error occurred: Unexpected field name 'image' in form data","timestamp":"2025-12-21T17:27:40.087Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of null (reading 'category_id')","timestamp":"2025-12-21T17:30:42.583Z"}
+{"level":"error","message":"Error occurred: Unexpected field name 'image' in form data","timestamp":"2025-12-21T17:39:13.032Z"}
+{"level":"error","message":"Prisma create error on product:","timestamp":"2025-12-21T18:09:27.680Z"}
+{"level":"error","message":"Error occurred: Unique constraint violation on field(s): \"slug\". A record with this value already exists.","timestamp":"2025-12-21T18:09:27.693Z"}
+{"level":"error","message":"Error occurred: File too large. Maximum size is 5MB per file","timestamp":"2025-12-21T18:09:49.530Z"}
+{"level":"error","message":"Prisma create error on product:","timestamp":"2025-12-21T18:09:58.115Z"}
+{"level":"error","message":"Error occurred: Unique constraint violation on field(s): \"slug\". A record with this value already exists.","timestamp":"2025-12-21T18:09:58.116Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:166:32\n\n  163 \n  164 // Execute queries\n  165 const [products, totalCount] = await Promise.all([\n→ 166   this.db.client.product.findMany(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-22T16:53:59.495Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:166:32\n\n  163 \n  164 // Execute queries\n  165 const [products, totalCount] = await Promise.all([\n→ 166   this.db.client.product.findMany(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-22T16:54:04.814Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:166:32\n\n  163 \n  164 // Execute queries\n  165 const [products, totalCount] = await Promise.all([\n→ 166   this.db.client.product.findMany(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-22T16:54:04.816Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.count()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:189:32\n\n  186     },\n  187   },\n  188 }),\n→ 189 this.db.client.product.count(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-22T16:54:26.430Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'product_id')","timestamp":"2025-12-22T17:13:27.744Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'product_id')","timestamp":"2025-12-22T17:14:22.009Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'product_id')","timestamp":"2025-12-22T17:16:31.142Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:23:46.452Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:34:06.248Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:34:17.985Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:40:42.570Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:40:50.830Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:41:54.962Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:43:03.125Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:44:03.706Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:49:02.714Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:49:43.320Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:52:22.421Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:52:40.349Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:54:09.833Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:54:52.315Z"}
+{"level":"error","message":"Error occurred: Failed to set primary image","timestamp":"2025-12-22T18:55:16.407Z"}
+{"level":"error","message":"Error occurred: Expected ',' or '}' after property value in JSON at position 17 (line 2 column 16)","timestamp":"2025-12-23T02:22:29.753Z"}
+{"level":"error","message":"Error occurred: Stock value is required and must be a number","timestamp":"2025-12-23T02:24:08.508Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.product.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/products/products.service.ts:166:32\n\n  163 \n  164 // Execute queries\n  165 const [products, totalCount] = await Promise.all([\n→ 166   this.db.client.product.findMany(\nCan't reach database server at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`\n\nPlease make sure your database server is running at `ecommarce.cnck60kc69z3.ap-south-1.rds.amazonaws.com:5432`.","timestamp":"2025-12-23T16:33:30.046Z"}
+{"level":"error","message":"Error occurred: Access token expired","timestamp":"2025-12-23T17:02:21.537Z"}
+{"level":"error","message":"Error occurred: Expected double-quoted property name in JSON at position 123 (line 7 column 1)","timestamp":"2025-12-23T17:25:10.582Z"}
+{"level":"error","message":"Error occurred: Unexpected token ']', ...\"0\" },\n    ],\n    \"pa\"... is not valid JSON","timestamp":"2025-12-23T17:27:54.403Z"}
+{"level":"error","message":"Error occurred: Unexpected token ']', ...\"0\" },\n    ],\n    \"pa\"... is not valid JSON","timestamp":"2025-12-23T17:27:55.852Z"}
+{"level":"error","message":"Error occurred: Expected double-quoted property name in JSON at position 127 (line 7 column 1)","timestamp":"2025-12-23T17:28:00.588Z"}
+{"level":"error","message":"Error occurred: Expected double-quoted property name in JSON at position 127 (line 7 column 1)","timestamp":"2025-12-23T17:28:01.517Z"}
+{"level":"error","message":"Error occurred: Access token is missing","timestamp":"2025-12-23T17:43:24.166Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.coupon.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/cupon/cupon.service.ts:248:31\n\n  245 \n  246 // Execute parallel queries for data and count\n  247 const [coupons, totalCount] = await Promise.all([\n→ 248   this.db.client.coupon.findMany(\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 17)","timestamp":"2025-12-23T18:05:14.255Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.coupon.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/cupon/cupon.service.ts:248:31\n\n  245 \n  246 // Execute parallel queries for data and count\n  247 const [coupons, totalCount] = await Promise.all([\n→ 248   this.db.client.coupon.findMany(\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 17)","timestamp":"2025-12-23T18:05:14.278Z"}
+{"level":"error","message":"Error occurred: \nInvalid `this.db.client.coupon.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/cupon/cupon.service.ts:248:31\n\n  245 \n  246 // Execute parallel queries for data and count\n  247 const [coupons, totalCount] = await Promise.all([\n→ 248   this.db.client.coupon.findMany(\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 17)","timestamp":"2025-12-23T18:05:14.329Z"}
+{"level":"error","message":"Error occurred: Access token expired","timestamp":"2025-12-23T18:06:18.916Z"}
+{"level":"error","message":"Error occurred: User not found","timestamp":"2025-12-23T18:16:10.228Z"}
+{"level":"error","message":"Error occurred: User not found","timestamp":"2025-12-23T18:16:22.543Z"}
+{"level":"error","message":"Error occurred: user is already exist","timestamp":"2025-12-23T18:25:08.402Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'email')","timestamp":"2025-12-23T18:28:28.964Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'email')","timestamp":"2025-12-23T18:28:43.308Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'email')","timestamp":"2025-12-23T18:29:20.589Z"}
+{"level":"error","message":"Error occurred: Cannot read properties of undefined (reading 'email')","timestamp":"2025-12-23T18:29:22.214Z"}
+{"level":"error","message":"Prisma read error on user:","timestamp":"2025-12-24T02:14:07.832Z"}
+{"level":"error","message":"Error occurred: Cannot reach database server at the configured host. Please verify your database server is running and accessible.","timestamp":"2025-12-24T02:14:07.838Z"}
+{"level":"error","message":"Prisma read error on user:","timestamp":"2025-12-24T02:14:07.853Z"}
+{"level":"error","message":"Error occurred: Cannot reach database server at the configured host. Please verify your database server is running and accessible.","timestamp":"2025-12-24T02:14:07.853Z"}
+{"level":"error","message":"Error occurred: Failed to fetch orders: \nInvalid `this.db.client.order.findMany()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/orders/orders.service.ts:707:30\n\n  704 \n  705 // Execute parallel queries for data and count\n  706 const [orders, total] = await Promise.all([\n→ 707   this.db.client.order.findMany(\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 17)","timestamp":"2025-12-24T17:03:34.968Z"}
+{"level":"error","message":"Error occurred: Failed to fetch orders: \nInvalid `this.db.client.order.count()` invocation in\n/Users/kevalkhetani/Desktop/artifytechsolution/projects/krambica/krambica-backend-pro/src/modules/orders/orders.service.ts:749:30\n\n  746     },\n  747   },\n  748 }),\n→ 749 this.db.client.order.count(\nTimed out fetching a new connection from the connection pool. More info: http://pris.ly/d/connection-pool (Current connection pool timeout: 10, connection limit: 17)","timestamp":"2025-12-24T17:13:20.387Z"}
+{"level":"error","message":"Error occurred: Either product_id or category_id is required","timestamp":"2025-12-24T17:48:30.525Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T17:51:17.349Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:04:51.468Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:05:01.576Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:09:19.065Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:12:25.228Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:13:41.228Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:14:28.857Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:14:52.412Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:15:08.244Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:17:31.174Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:17:32.746Z"}
+{"level":"error","message":"Error occurred: product not found","timestamp":"2025-12-24T18:18:54.961Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:35:28.031Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:38:15.849Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:38:17.057Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:38:33.405Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:38:34.383Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:42:07.661Z"}
+{"level":"error","message":"Error occurred: Product with ID 1d8d47dd-7064-447d-9687-988c61d15430 does not exist","timestamp":"2025-12-24T18:44:29.485Z"}
+{"level":"error","message":"Error occurred: Unexpected token ']', ...\"},\n    \n  ]\n}\" is not valid JSON","timestamp":"2025-12-24T18:45:04.265Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:50:19.017Z"}
+{"level":"error","message":"Error occurred: Product  is already added to this promotion","timestamp":"2025-12-24T18:50:31.337Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:50:36.573Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:51:42.396Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:53:09.987Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:53:25.146Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T18:53:47.264Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T19:30:15.372Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T19:30:15.531Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T19:30:29.797Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T19:30:29.894Z"}
+{"level":"error","message":"Error occurred: Promotion not found","timestamp":"2025-12-24T19:34:53.813Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:50:26.433Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:51:14.423Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:21.566Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:22.502Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:23.219Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:54.063Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:55.185Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:52:55.945Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T06:53:43.594Z"}
+{"level":"error","message":"Error occurred: Order e5ecfb16-1e35-47d5-98f6-22ebee604d39 not found","timestamp":"2025-12-25T12:44:28.117Z"}
+{"level":"error","message":"Error occurred: Order e5ecfb16-1e35-47d5-98f6-22ebee604d39 not found","timestamp":"2025-12-25T12:45:08.790Z"}
+{"level":"error","message":"Error occurred: Unexpected token '\"', \"\"user_id\":9\" is not valid JSON","timestamp":"2025-12-25T12:55:23.274Z"}
+{"level":"error","message":"Error occurred: Invalid field: category_id","timestamp":"2025-12-25T14:22:54.450Z"}
+{"level":"error","message":"Error occurred: Invalid field: category_id","timestamp":"2025-12-25T14:22:57.467Z"}
+{"level":"error","message":"Error occurred: Invalid field: undefined","timestamp":"2025-12-25T14:23:30.516Z"}

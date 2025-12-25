@@ -12,6 +12,7 @@ import _ from 'lodash';
 import { IEmailService } from '../../interfaces/send-mail-service.interface';
 import { PrismaClient } from '@prisma/client';
 import { ICouponService } from '../../interfaces/ICouponService.interface';
+import { buildPrismaQuery, parseQueryParams } from '../../utils/prisma-query-builder';
 
 @injectable()
 export class CuponService implements ICouponService, IService {
@@ -196,6 +197,83 @@ export class CuponService implements ICouponService, IService {
     );
 
     return createCupon;
+  }
+  async getAll(queryParams: any): Promise<any> {
+    try {
+      // Define allowed fields with their types for filtering/searching
+      const allowedFields: Record<string, 'string' | 'int' | 'float' | 'enum' | 'datetime'> = {
+        coupon_id: 'int',
+        code: 'string',
+        description: 'string',
+        type: 'enum', // PERCENTAGE, FIXED
+        value: 'float',
+        minOrderValue: 'float',
+        maxDiscount: 'float',
+        usageLimit: 'int',
+        usedCount: 'int',
+        perUserLimit: 'int',
+        validFrom: 'datetime',
+        validTo: 'datetime',
+        status: 'enum', // ACTIVE, INACTIVE, EXPIRED
+        createdAt: 'datetime',
+        updatedAt: 'datetime',
+      };
+
+      // Define search groups - fields that should be combined in OR search
+      const combineSearchGroups: string[][] = [
+        ['code', 'description'], // Search across code and description together
+      ];
+
+      // Extract directly from your request body format
+      // { "filters": [], "globalSearch": "keval-kurti-test", "page": 1, "limit": 9 }
+      const filters = queryParams.filters || [];
+      const page = queryParams.page || 1;
+      const limit = queryParams.limit || 10;
+      const globalSearch = queryParams.globalSearch || '';
+
+      console.log('🔍 Fetching coupons', { page, limit, globalSearch, filters });
+
+      // Build Prisma query with filters, pagination, and search
+      const { where, orderBy, skip, take } = buildPrismaQuery(
+        filters,
+        allowedFields,
+        page,
+        limit,
+        globalSearch,
+        combineSearchGroups,
+      );
+
+      // Execute parallel queries for data and count
+      const [coupons, totalCount] = await Promise.all([
+        this.db.client.coupon.findMany({
+          where,
+          skip,
+          take,
+          orderBy: orderBy.length > 0 ? orderBy : [{ createdAt: 'desc' }],
+        }),
+        this.db.client.coupon.count({ where }),
+      ]);
+
+      console.log(`✅ Retrieved ${coupons.length} coupons out of ${totalCount} total`);
+
+      const totalPages = Math.ceil(totalCount / take);
+
+      // Return structured response matching your format
+      return {
+        data: coupons,
+        pagination: {
+          total: totalCount,
+          page,
+          limit: take,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPreviousPage: page > 1,
+        },
+      };
+    } catch (error: any) {
+      console.error('❌ Error fetching coupons', { error: error.message });
+      throw new InvalidInputError(error.message);
+    }
   }
 
   // async list(query: any = {}): Promise<any> {

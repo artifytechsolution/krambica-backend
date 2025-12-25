@@ -43,7 +43,7 @@ export interface IProductsService {
   uploadMultipleImages(data: UploadMultipleImagesData): Promise<any>;
   getProductImages(productId: string): Promise<any>;
   deleteProductImage(imageId: number): Promise<any>;
-  setPrimaryProductImage(imageId: number): Promise<any>;
+  setPrimaryProductImage(imageId: any): Promise<any>;
   updateProductImage(imageId: number, updateData: any): Promise<any>;
 
   // Stock and Inventory Management
